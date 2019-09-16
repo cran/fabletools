@@ -10,25 +10,60 @@ features_impl <- function(.tbl, .var, features, ...){
     dots$.period <- get_frequencies(NULL, .tbl, .auto = "smallest")
   }
   
-  .resp <- map(.var, eval_tidy, data = .tbl)
+  # Compute response
   key_dt <- key_data(.tbl)
+  .tbl <- as_tibble(.tbl)
+  if(NROW(key_dt) > 1){
+    .tbl <- dplyr::new_grouped_df(.tbl, key_dt)
+  }
+  .resp <- unclass(dplyr::transmute(.tbl, !!!.var))
+  .resp <- .resp[seq_along(.var) + NCOL(key_dt) - 1]
+  names(.resp) <- names(.var)
+  
+  # Compute features
   out <- map(.resp, function(x){
-    tbl <- imap(features, function(fn, nm){
+    res <- imap(features, function(fn, nm){
       fmls <- formals(fn)[-1]
-      fn_safe <- possibly(fn, tibble(.rows = 1))
-      tbl <- invoke(dplyr::bind_rows, map(key_dt[[".rows"]], function(i){
+      fn_safe <- safely(fn, tibble(.rows = 1))
+      res <- transpose(map(key_dt[[".rows"]], function(i){
         out <- do.call(fn_safe, c(list(x[i]), dots[intersect(names(fmls), names(dots))]))
-        if(is.null(names(out))) names(out) <- rep(".?", length(out))
+        if(is.null(names(out[["result"]]))) 
+          names(out[["result"]]) <- rep(".?", length(out[["result"]]))
         out
       }))
+      err <- compact(res[["error"]])
+      tbl <- invoke(dplyr::bind_rows, res[["result"]])
+      
       names(tbl)[names(tbl) == ".?"] <- ""
       if(is.character(nm) && nzchar(nm)){
         names(tbl) <- sprintf("%s%s%s", nm, ifelse(nzchar(names(tbl)), "_", ""), names(tbl))
       }
-      tbl
+      list(error = err, result = tbl)
     })
-    invoke(dplyr::bind_cols, tbl)
+    res <- transpose(res)
+    res[["result"]] <- invoke(dplyr::bind_cols, res[["result"]])
+    res
   })
+  out <- transpose(out)
+  
+  # Report errors
+  err <- flatten(unname(out$error))
+  imap(err, function(err, nm){
+    err <- compact(err)
+    if((tot_err <- length(err)) > 0){
+      err_msg <- table(map_chr(err, function(x) x[["message"]]))
+      warn(
+        sprintf("%i error%s encountered for feature %s\n%s\n",
+                tot_err,
+                if(tot_err > 1) sprintf("s (%i unique)", length(err_msg)) else "", 
+                nm,
+                paste0("[", err_msg, "] ", names(err_msg), collapse = "\n")
+        )
+      )
+    }
+  })
+  
+  out <- out[["result"]]
   
   if(!is.null(names(out))){
     out <- imap(out, function(tbl, nm){
@@ -54,7 +89,7 @@ features_impl <- function(.tbl, .var, features, ...){
 #' @param .var,.vars The variable(s) to compute features on
 #' @param features A list of functions (or lambda expressions) for the features to compute. [`feature_set()`] is a useful helper for building sets of features.
 #' @param .predicate A predicate function (or lambda expression) to be applied to the columns or a logical vector. The variables for which .predicate is or returns TRUE are selected.
-#' @param ... Additional arguments to be passed to each feature.
+#' @param ... Additional arguments to be passed to each feature. These arguments will only be passed to features which use it in their formal arguments ([`base::formals()`]), and not via their `...`. While passing `na.rm = TRUE` to [`stats::var()`] will work, it will not for [`base::mean()`] as its formals are `x` and `...`. To more precisely pass inputs to each function, you can use lambdas in the list of features (`~ mean(., na.rm = TRUE)`).
 #'
 #' @export
 features <- function(.tbl, .var, features, ...){

@@ -105,6 +105,9 @@ bias_adjust <- function(bt, sd){
     warn("Could not bias adjust the point forecasts as the forecast standard deviation is unknown. Perhaps your series is too short or insufficient bootstrap samples are used.")
     return(bt)
   }
+  if(is.name(body(bt))){
+    return(bt)
+  }
   function(x){
     h <- .Machine$double.eps^(1/4)
     f0 <- bt(x)
@@ -126,7 +129,7 @@ bias_adjust <- function(bt, sd){
       environment(bt_hessian) <- env_bury(get_env(bt), bt = bt, f0 = f0, h = h)
     }
     
-    hessian <- as.numeric(bt_hessian(x)%@%"hessian")
+    hessian <- as.numeric(attr(bt_hessian(x), "hessian"))
 
     if(any(!is.na(f0) & !is.finite(hessian))){
       warn("Could not bias adjust the point forecasts as the back-transformation's hessian is not well behaved. Consider using a different transformation.")
@@ -152,7 +155,7 @@ invert_transformation <- function(x, ...){
 
 #' @export
 invert_transformation.transformation <- function(x, ...){
-  new_transformation(x%@%"inverse", `attributes<-`(x, NULL))
+  new_transformation(attr(x, "inverse"), `attributes<-`(x, NULL))
 }
 
 inverse_table <- inverse_table()

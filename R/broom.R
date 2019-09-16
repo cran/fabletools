@@ -32,7 +32,7 @@ augment.mdl_df <- function(x, ...){
 augment.mdl_ts <- function(x, ...){
   tryCatch(augment(x[["fit"]], ...),
            error = function(e){
-             idx <- as_string(index(x$data))
+             idx <- index_var(x$data)
              resp <- x$response
              if(length(resp) > 1){
                response(x) %>% 
@@ -129,4 +129,10 @@ coef.mdl_df <- function(object, ...){
 #' @export
 tidy.mdl_ts <- function(x, ...){
   tidy(x$fit, ...)
+}
+
+#' @rdname tidy
+#' @export
+coef.mdl_ts <- function(object, ...){
+  tidy(object, ...)
 }

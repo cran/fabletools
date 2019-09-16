@@ -41,18 +41,18 @@ as_fable <- function(x, ...){
 #' @rdname as-fable
 #' @export
 as_fable.tbl_ts <- function(x, response, distribution, ...){
-  response <- enquo(response)
-  if(quo_is_call(response) && call_name(response) == "c"){
-    response[[1]] <- rlang::exprs
-    response <- eval_tidy(response)
+  quo_response <- enquo(response)
+  # If the response (from user input) needs converting
+  if(!possibly(is.list, FALSE)(response)){
+    if(quo_is_call(quo_response) && call_name(quo_response) == "c"){
+      response[[1]] <- rlang::exprs
+      response <- eval_tidy(quo_response)
+    }
+    else{
+      response <- list(get_expr(quo_response))
+    }
   }
-  else if(possibly(compose(is.list, eval_tidy), FALSE)(response)){
-    response <- eval_tidy(response)
-  }
-  else{
-    response <- list(get_expr(response))
-  }
-
+  
   fbl <- new_tsibble(x, class = "fbl_ts",
                      response = response, dist = enexpr(distribution),
                      model_cn = ".model")
@@ -63,16 +63,16 @@ as_fable.tbl_ts <- function(x, response, distribution, ...){
 #' @rdname as-fable
 #' @export
 as_fable.grouped_ts <- function(x, response, distribution, ...){
-  response <- enquo(response)
-  if(quo_is_call(response) && call_name(response) == "c"){
-    response[[1]] <- rlang::exprs
-    response <- eval_tidy(response)
-  }
-  else if(possibly(compose(is.list, eval_tidy), FALSE)(response)){
-    response <- eval_tidy(response)
-  }
-  else{
-    response <- list(get_expr(response))
+  quo_response <- enquo(response)
+  # If the response (from user input) needs converting
+  if(!possibly(is.list, FALSE)(response)){
+    if(quo_is_call(quo_response) && call_name(quo_response) == "c"){
+      quo_response[[1]] <- rlang::exprs
+      response <- eval_tidy(quo_response)
+    }
+    else{
+      response <- list(get_expr(quo_response))
+    }
   }
   
   fbl <- structure(x, class = c("grouped_fbl", "grouped_ts", "grouped_df", 
@@ -96,10 +96,21 @@ as_fable.fbl_ts <- function(x, response, distribution, ...){
   if(missing(response)){
     response <- x%@%"response"
   }
+  else{
+    quo_response <- enquo(response)
+    # If the response (from user input) needs converting
+    if(quo_is_call(quo_response) && call_name(quo_response) == "c"){
+      response[[1]] <- rlang::exprs
+      response <- eval_tidy(quo_response)
+    }
+    else{
+      response <- list(get_expr(quo_response))
+    }
+  }
   if(missing(distribution)){
     distribution <- x%@%"dist"
   }
-  as_fable(update_tsibble(x, ...), response = !!enquo(response),
+  as_fable(update_tsibble(x, ...), response = response,
            distribution = !!enexpr(distribution))
 }
 
@@ -120,16 +131,17 @@ as_tsibble.grouped_fbl <- function(x, ...){
 
 validate_fable <- function(fbl){
   stopifnot(inherits(fbl, "fbl_ts"))
-  if (!all(map_chr(fbl%@%"response", expr_text) %in% names(fbl))){
-    bad_resp <- map_chr(fbl%@%"response", expr_text)
-    bad_resp <- paste0(setdiff(bad_resp, names(fbl)), collapse = ", ")
+  chr_resp <- map_chr(attr(fbl, "response"), expr_text)
+  chr_dist <- as_string(attr(fbl, "dist"))
+  if (!all(chr_resp %in% names(fbl))){
+    bad_resp <- paste0(setdiff(chr_resp, names(fbl)), collapse = ", ")
     abort(sprintf("Could not find response variable(s) in the fable: %s", bad_resp))
   }
-  if (!(as_string(fbl%@%"dist") %in% names(fbl))){
+  if (!(chr_dist %in% names(fbl))){
     abort(sprintf("Could not find distribution variable `%s` in the fable.",
-          as_string(fbl%@%"dist")))
+                  chr_dist))
   }
-  if (!inherits(fbl[[expr_text(fbl%@%"dist")]], "fcdist")){
+  if (!inherits(fbl[[chr_dist]], "fcdist")){
     abort('Distribution variable must be of class "fcdist"')
   }
 }

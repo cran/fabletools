@@ -1,34 +1,3 @@
-parse_aggregation <- function(spec){
-  if(!is_call(spec)){
-    return(as_string(spec))
-  }
-  eval_tidy(spec, env = env(
-    `*` = function(e1, e2) {
-      e1 <- parse_aggregation(enexpr(e1))
-      e2 <- parse_aggregation(enexpr(e2))
-      c(
-        e1, e2,
-        flatten(map(e1, function(x){
-          map(e2, function(y){
-            c(x, y)
-          })
-        }))
-      )
-    },
-    `/` = function(e1, e2) {
-      e1 <- enexpr(e1)
-      e2 <- enexpr(e2)
-      if(is_call(e1)) abort("Hierarchical structure must be specified for specific nodes. Try adding more parenthesis.")
-      e1 <- parse_aggregation(e1)
-      e2 <- parse_aggregation(e2)
-      c(
-        e1,
-        map(e2, function(x, y) c(y, x), e1)
-      )
-    }
-  ))
-}
-
 #' Expand a dataset to include other levels of aggregation
 #' 
 #' Uses the structural specification given in `.spec` to aggregate a time
@@ -71,9 +40,17 @@ aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){
   }
   
   # Key combinations
-  key_comb <- c(list(chr()), parse_aggregation(.spec))
+  tm <- stats::terms(new_formula(lhs = NULL, rhs = .spec), env = empty_env())
+  key_comb <- attr(tm, "factors")
+  key_vars <- rownames(key_comb)
+  key_comb <- map(split(key_comb, col(key_comb)), function(x) key_vars[x!=0])
+  
+  if(attr(tm, "intercept")){
+    key_comb <- c(list(chr()), key_comb)
+  }
   
   idx <- index2(.data)
+  intvl <- interval(.data)
   .data <- as_tibble(.data)
   
   agg_dt <- bind_row_attrb(map(key_comb, function(x){
@@ -91,7 +68,9 @@ aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){
   .data <- ungroup(.data)
   
   # Return tsibble
-  build_tsibble_meta(.data, key_data = key_dt, index = as_string(idx), index2 = as_string(idx), ordered = TRUE) %>% 
+  build_tsibble_meta(.data, key_data = key_dt, index = as_string(idx), 
+                     index2 = as_string(idx), ordered = TRUE,
+                     interval = intvl) %>% 
     mutate(!!!set_names(map(kv, function(x) expr(agg_key(!!sym(x)))), kv))
 }
 

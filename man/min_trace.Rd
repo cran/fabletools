@@ -4,15 +4,17 @@
 \alias{min_trace}
 \title{Minimum trace forecast reconciliation}
 \usage{
-min_trace(models, method = c("shrink", "wls", "ols", "cov"),
-  sparse = requireNamespace("SparseM"))
+min_trace(models, method = c("wls_var", "ols", "wls_struct", "mint_cov",
+  "mint_shrink"), sparse = NULL)
 }
 \arguments{
 \item{models}{A column of models in a mable.}
 
 \item{method}{The reconciliation method to use.}
 
-\item{sparse}{If TRUE, the reconciliation will be computed using sparse matrix algebra?}
+\item{sparse}{If TRUE, the reconciliation will be computed using sparse
+matrix algebra? By default, sparse matrices will be used if the MatrixM
+package is installed.}
 }
 \description{
 Reconciles a hierarchy using the minimum trace combination method. The

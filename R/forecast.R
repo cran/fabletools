@@ -81,6 +81,10 @@ forecast <- function(object, ...){
 forecast.mdl_df <- function(object, new_data = NULL, h = NULL, bias_adjust = TRUE, ...){
   kv <- c(key_vars(object), ".model")
   mdls <- object%@%"models"
+  if(!is.null(h) && !is.null(new_data)){
+    warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
+    h <- NULL
+  }
   if(!is.null(new_data)){
     object <- bind_new_data(object, new_data)
   }
@@ -111,6 +115,10 @@ forecast.lst_mdl <- function(object, new_data = NULL, key_data, ...){
 
 #' @export
 forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = TRUE, ...){
+  if(!is.null(h) && !is.null(new_data)){
+    warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
+    h <- NULL
+  }
   if(is.null(new_data)){
     new_data <- make_future_data(object$data, h)
   }
@@ -149,22 +157,28 @@ These required variables can be provided by specifying `new_data`.",
     set_env(bt, env)
   })
   
-  if(isTRUE(bias_adjust)){
-    # Faster version of bias_adjust(bt, fc[["sd"]]^2)(fc[["mean"]]) 
-    fc[["point"]] <- pmap(list(fc[["point"]], fc[["sd"]], bt), function(fc, sd, bt) bias_adjust(bt,sd)(fc))
-  }
-  else{
-    fc[["point"]] <- map2(fc[["point"]], bt, function(fc, bt) bt(fc))
-  }
-  
   fc[["dist"]] <- update_fcdist(fc[["dist"]], transformation = bt)
-  fc[["point"]] <- set_names(fc[["point"]], map_chr(object$response, expr_text))
+  if(isTRUE(bias_adjust)){
+    # Bias adjust transformation with sd
+    bt <- map2(bt, fc[["sd"]], fabletools::bias_adjust)
+  }
+  fc[["point"]] <- map2(fc[["point"]], bt, function(fc, bt) bt(fc))
+  names(fc[["point"]]) <- map_chr(object$response, expr_text)
   
-  out <- mutate(new_data, 
-                !!!(fc[["point"]]),
-                .distribution = fc[["dist"]])
-  out <- select(out, !!index(out), names(fc[["point"]]), !!sym(".distribution"), seq_along(out))
-  as_fable(out,
+  idx <- index_var(new_data)
+  mv <- measured_vars(new_data)
+  cn <- c(names(fc[["point"]]), ".distribution")
+  new_data[names(fc[["point"]])] <- fc[["point"]]
+  new_data[[".distribution"]] <- fc[["dist"]]
+  
+  fbl <- build_tsibble_meta(
+    as_tibble(new_data)[c(idx, cn, mv)],
+    key_data(new_data),
+    index = idx, index2 = idx, ordered = is_ordered(new_data),
+    interval = interval(new_data)
+  )
+  
+  as_fable(fbl,
            resp = object$response,
            dist = !!sym(".distribution")
   )

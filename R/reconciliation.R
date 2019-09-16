@@ -37,7 +37,9 @@ reconcile.mdl_df <- function(.data, ...){
 #' 
 #' @param models A column of models in a mable.
 #' @param method The reconciliation method to use.
-#' @param sparse If TRUE, the reconciliation will be computed using sparse matrix algebra?
+#' @param sparse If TRUE, the reconciliation will be computed using sparse 
+#' matrix algebra? By default, sparse matrices will be used if the MatrixM 
+#' package is installed.
 #' 
 #' @seealso 
 #' [`reconcile()`], [`aggregate_key()`]
@@ -46,8 +48,11 @@ reconcile.mdl_df <- function(.data, ...){
 #' Wickramasuriya, S. L., Athanasopoulos, G., & Hyndman, R. J. (2019). Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization. Journal of the American Statistical Association, 1-45. https://doi.org/10.1080/01621459.2018.1448825 
 #' 
 #' @export
-min_trace <- function(models, method = c("shrink", "wls", "ols", "cov"),
-                 sparse = requireNamespace("SparseM")){
+min_trace <- function(models, method = c("wls_var", "ols", "wls_struct", "mint_cov", "mint_shrink"),
+                 sparse = NULL){
+  if(is.null(sparse)){
+    sparse <- requireNamespace("SparseM", quietly = TRUE)
+  }
   structure(models, class = c("lst_mint_mdl", "lst_mdl"),
             method = match.arg(method), sparse = sparse)
 }
@@ -75,6 +80,9 @@ forecast.lst_mint_mdl <- function(object, key_data, ...){
     }) %>% 
     transpose_dbl()
   
+  # Coonstruct mpute S martrix - ??GA: have moved this here as I need it for Structural scaling
+  S <- build_smat(key_data)
+
   # Compute weights (sample covariance)
   res <- map(object, function(x, ...) residuals(x, ...)[[2]], type = "response")
   res <- matrix(invoke(c, res), ncol = length(object))
@@ -84,13 +92,16 @@ forecast.lst_mint_mdl <- function(object, key_data, ...){
   if(method == "ols"){
     # OLS
     W <- diag(nrow = nrow(covm), ncol = ncol(covm))
-  } else if(method == "wls"){
-    # WLS
+  } else if(method == "wls_var"){
+    # WLS variance scaling
     W <- diag(diag(covm))
-  } else if (method == "cov"){
+  } else if (method == "wls_struct"){
+    # WLS structural scaling
+    W <- diag(apply(S,1,sum))
+  } else if (method == "mint_cov"){
     # min_trace covariance
     W <- covm
-  } else if (method == "shrink"){
+  } else if (method == "mint_shrink"){
     # min_trace shrink
     tar <- diag(apply(res, 2, compose(crossprod, stats::na.omit))/n)
     corm <- stats::cov2cor(covm)
@@ -114,8 +125,6 @@ forecast.lst_mint_mdl <- function(object, key_data, ...){
   }
   
   # Reconciliation matrices
-  S <- build_smat(key_data)
-  
   R1 <- stats::cov2cor(W)
   W_h <- map(fc_var, function(var) diag(sqrt(var))%*%R1%*%t(diag(sqrt(var))))
   
@@ -150,7 +159,6 @@ forecast.lst_mint_mdl <- function(object, key_data, ...){
     P <- solve(R%*%S)%*%R
   }
   
-  
   # Apply to forecasts
   fc_point <- as.matrix(S%*%P%*%t(fc_point))
   fc_point <- split(fc_point, row(fc_point))
@@ -179,6 +187,9 @@ build_smat <- function(key_data){
   smat <- map(fct, function(x){
     mat <- rep(0, length(x)*length(levels(x)))
     i <- which(!is.na(x))
+    if(length(i) == length(x) && length(levels(x)) > 1){
+      abort("Reconciliation of disjoint hierarchical structures is not yet supported.")
+    }
     j <- as.numeric(x[i])
     mat[i + length(x) * (j-1)] <- 1
     mat <- matrix(mat, nrow = length(x), ncol = length(levels(x)),

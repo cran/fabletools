@@ -27,6 +27,7 @@ custom_error <- function(.f, error){
   }
 }
 
+#' @importFrom tibble new_tibble
 make_future_data <- function(.data, h = NULL){
   n <- get_frequencies(h, .data, .auto = "smallest")
   if(length(n) > 1){
@@ -34,7 +35,22 @@ make_future_data <- function(.data, h = NULL){
     n <- min(n)
   }
   if(is.null(h)) n <- n*2
-  tsibble::new_data(.data, round(n))
+  
+  # tsibble::new_data(.data, round(n))
+  # Re-implemented here using a simpler/faster method
+  
+  idx <- index_var(.data)
+  itvl <- interval(.data)
+  tunit <- time_unit(itvl)
+  
+  idx_max <- max(.data[[idx]])
+  
+  .data <- list2(!!idx := seq(idx_max, by = tunit, length.out = n+1)[-1])
+  build_tsibble_meta(
+    new_tibble(.data, nrow = n),
+    key_data = new_tibble(list(.rows = list(seq_len(n))), nrow = 1),
+    index = idx, index2 = idx, ordered = TRUE, interval = itvl
+  )
 }
 
 bind_new_data <- function(object, new_data){
@@ -156,23 +172,28 @@ nest_grps <- function(.data, nm = "data"){
 }
 
 nest_keys <- function(.data, nm = "data"){
-  out <- key_data(.data)
+  out <- unclass(key_data(.data))
   key <- key_vars(.data)
-  row_indices <- out[[NCOL(out)]]
-  out[[NCOL(out)]] <- NULL
+  row_indices <- out[[length(out)]]
+  out[[length(out)]] <- NULL
   col_nest <- -match(key, colnames(.data))
   if(is_empty(col_nest)){
-    col_nest <- rlang::missing_arg()
+    col_nest <- NULL
   }
-  idx <- as_string(index(.data))
-  idx2 <- as_string(index2(.data))
+  idx <- index_var(.data)
+  idx2 <- index2_var(.data)
+  ordered <- is_ordered(.data)
+  regular <- is_regular(.data)
   out[[nm]] <- map(row_indices, function(x, i, j){
-    out <- x[i,j]
-    build_tsibble(out, index = idx, index2 = idx2,
-                  ordered = is_ordered(x), interval = is_regular(x),
-                  validate = FALSE)
-  }, x = .data, j = col_nest)
-  out
+    out <- if(is.null(j)) x[i,] else x[i,j]
+    build_tsibble_meta(
+      out, 
+      key_data = as_tibble(list(.rows = list(seq_along(i)))),
+      index = idx, index2 = idx2, ordered = ordered, 
+      interval = if(length(i) > 1 && regular) interval_pull(out[[idx]]) else interval(.data)
+    )
+  }, x = as_tibble(.data), j = col_nest)
+  as_tibble(out)
 }
 
 bind_row_attrb <- function(x){
@@ -185,4 +206,8 @@ bind_row_attrb <- function(x){
     attributes(x[[col]]) <- attrb[[col]][[1]]
   }
   x
+}
+
+is.formula <- function(x) {
+  inherits(x, "formula")
 }

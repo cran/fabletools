@@ -3,7 +3,7 @@ parse_specials <- function(call = NULL, specials = NULL){
     call <- enexpr(call)
     
     # Don't parse xreg_specials - leave them to the xregs
-    nm <- setdiff(names(specials), specials%@%"xreg_specials")
+    nm <- setdiff(names(specials), attr(specials, "xreg_specials"))
     
     parsed <- traverse_call(!!call,
                             .f = function(.x, ...) {
@@ -40,7 +40,7 @@ parse_specials <- function(call = NULL, specials = NULL){
   
   # Add required_specials
   missing_specials <- setdiff(attr(specials, "required_specials"), names(parsed))
-  parsed[missing_specials] <- map(missing_specials, compose("list", "call2"))
+  parsed[missing_specials] <- map(missing_specials, function(x) list(call(x)))
   
   parsed
 }
@@ -63,7 +63,7 @@ validate_formula <- function(model, data = NULL){
     model$formula <- guess_response(data)
   }
   else{
-    if(possibly(compose(is_formula, eval_tidy), FALSE)(model$formula)){
+    if(possibly(compose(is.formula, eval_tidy), FALSE)(model$formula)){
       f_env <- get_env(model$formula)
       model$formula <- eval_tidy(model$formula)
       environment(model$formula) <- f_env

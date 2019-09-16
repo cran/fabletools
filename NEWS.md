@@ -1,3 +1,22 @@
+# fabletools 0.1.1
+
+## Breaking changes
+
+* Updated method names available for `min_trace()` reconciliation (@GeorgeAthana).
+
+## Improvements
+
+* Improved error messaging for failing features.
+* Added Continuous Ranked Probability Score (`CRPS()`) accuracy measure.
+* Transformations of features are now computed for separately for each key, allowing transformations such as `scale(value)` to be used.
+* Added structural scaling method for MinT (`min_trace(method = "wls_struct")`) forecast reconciliation (@GeorgeAthana).
+* Performance improvements.
+* Documentation improvements.
+
+## Bug fixes
+
+* Added failure condition for disjoint reconciliation graphs.
+
 # fabletools 0.1.0
 
 * First release.
