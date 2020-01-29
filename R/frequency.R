@@ -31,9 +31,13 @@ common_periods.tbl_ts <- function(x){
 #' @rdname freq_tools
 #' @export
 common_periods.interval <- function(x){
+  if(inherits(x, "vctrs_vctr")){
+    x <- vctrs::vec_data(x)
+  }
   freq_sec <- c(year = 31557600, week = 604800, day = 86400, hour = 3600, minute = 60, second = 1,
                 millisecond = 1e-3, microsecond = 1e-6, nanosecond = 1e-9)
   nm <- names(x)[x!=0]
+  if(is_empty(x)) abort("Seasonal periods cannot be automatically identified from irregular time series.")
   switch(paste(nm, collapse = ""),
          "unit" = c("none" = 1),
          "year" = c("year" = 1),
@@ -41,12 +45,7 @@ common_periods.interval <- function(x){
          "month" = c("year" = 12/x[["month"]]),
          "week" = c("year" = 52/x[["week"]]),
          "day" = c("year" = 365.25, "week" = 7)/x[["day"]],
-         with(list(secs = freq_sec/sum(as.numeric(x)*freq_sec[nm])), {
-           if(any(is.na(secs))){
-             abort("Irregular time series provided")
-           }
-           secs[secs>1]
-         })
+         with(list(secs = freq_sec/sum(as.numeric(x)*freq_sec[nm])), secs[secs>1])
   )
 }
 

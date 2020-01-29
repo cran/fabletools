@@ -1,13 +1,15 @@
 globalVariables("self")
 
-train_decomposition <- function(.data, specials, ..., dcmp_fn, 
-                                dcmp_args = list()){
+train_decomposition <- function(.data, specials, ..., dcmp){
   # Extract raw original data
-  dcmp <- do.call(dcmp_fn, list2(self$data, self$formula, !!!dcmp_args))
-  
-  dcmp_method <- (dcmp%@%"aliases")[[as_string(dcmp%@%"resp")]]
+  dcmp <- components(model(self$data, dcmp))
+  dcmp_method <- (dcmp%@%"aliases")[[as_string(dcmp%@%"response")]]
   structure <- dcmp%@%"seasons"
   aliases <- dcmp%@%"aliases"
+  method <- dcmp%@%"method"
+  
+  xreg_vars <- setdiff(names(self$data), names(.data))
+  dcmp[xreg_vars] <- self$data[xreg_vars]
   
   req_vars <- all.vars(dcmp_method)
   
@@ -21,6 +23,7 @@ train_decomposition <- function(.data, specials, ..., dcmp_fn,
     abort("Only modelling of additive decompositions is supported.")
   }
   
+  dcmp <- update_tsibble(dcmp, key = NULL)
   mdls <- dots_list(...) %>% 
     map(function(x) estimate(dcmp, x))
   
@@ -70,7 +73,7 @@ Please specify an appropriate model for these components",
 Please check that you have specified the decomposition models appropriately.")
   }
   
-  structure(model[["fit"]], dcmp_method = dcmp%@%"method",
+  structure(model[["fit"]], dcmp_method = method,
             class = union("decomposition_model", class(model[["fit"]])))
 }
 
@@ -86,10 +89,8 @@ Please check that you have specified the decomposition models appropriately.")
 #' These component models will be combined according to the decomposition 
 #' method, giving a combination model for the response of the decomposition.
 #' 
-#' @param dcmp_fn The decomposition function
-#' @param formula The formula used to describe the decomposition
+#' @param dcmp A model definition which supports extracting decomposed [`components()`].
 #' @param ... Model definitions used to model the components
-#' @param dcmp_args Arguments to be passed to the decomposition function (`.dcmp_fn`)
 #' 
 #' @examples 
 #' if (requireNamespace("fable", quietly = TRUE) && requireNamespace("feasts", quietly = TRUE)) {
@@ -103,13 +104,14 @@ Please check that you have specified the decomposition models appropriately.")
 #'   
 #' # Identify an appropriate decomposition
 #' vic_food %>% 
-#'   STL(log(Turnover) ~ season(window = Inf)) %>% 
+#'   model(STL(log(Turnover) ~ season(window = Inf))) %>% 
+#'   components() %>% 
 #'   autoplot()
 #'   
 #' # Use an ARIMA model to seasonally adjusted data, and SNAIVE to season_year
 #' # Any model can be used, and seasonal components will default to use SNAIVE.
 #' my_dcmp_spec <- decomposition_model(
-#'   STL, log(Turnover) ~ season(window = Inf),
+#'   STL(log(Turnover) ~ season(window = Inf)),
 #'   ETS(season_adjust ~ season("N")), SNAIVE(season_year)
 #' )
 #' 
@@ -123,11 +125,10 @@ Please check that you have specified the decomposition models appropriately.")
 #' [*Forecasting: Principles and Practice* - Forecasting Decomposition](https://otexts.com/fpp3/forecasting-decomposition.html)
 #' 
 #' @export
-decomposition_model <- function(dcmp_fn, formula, ..., dcmp_args = list()){
+decomposition_model <- function(dcmp, ...){
   dcmp_model <- new_model_class("dcmp_mdl", train = train_decomposition, 
                                 specials = new_specials(xreg = function(...) NULL))
-  new_model_definition(dcmp_model, !!enquo(formula), ..., 
-                       dcmp_fn = dcmp_fn, dcmp_args = dcmp_args)
+  new_model_definition(dcmp_model, !!dcmp$formula, ..., dcmp = dcmp)
 }
 
 #' @export

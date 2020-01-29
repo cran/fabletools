@@ -69,6 +69,15 @@ test_that("mable dplyr verbs", {
     colnames %>% 
     expect_identical(c("key", "ets"))
   
+  # Test for negative tidyselect with keyed data (#120)
+  mbl_complex %>% 
+    select(-lm) %>%
+    colnames() %>% 
+    expect_identical(c("key", "ets"))
+  
+  expect_error(select(mbl_complex, -key),
+               "not a valid mable")
+  
   expect_output(mbl_complex %>% filter(key == "mdeaths") %>% print, "mable") %>% 
     .[["key"]] %>% 
     expect_identical("mdeaths")

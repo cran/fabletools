@@ -32,7 +32,7 @@ some hierarchy.
 This function is experimental, and is subject to change in the future.
 
 The way in which the measured variables are aggregated is specified in a
-similar way to how \code{[dplyr::summarise()]} is used.
+similar way to how \verb{[dplyr::summarise()]} is used.
 }
 \examples{
 library(tsibble)

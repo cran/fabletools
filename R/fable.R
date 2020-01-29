@@ -42,8 +42,10 @@ as_fable <- function(x, ...){
 #' @export
 as_fable.tbl_ts <- function(x, response, distribution, ...){
   quo_response <- enquo(response)
+  response <- possibly(eval_tidy, NULL)(quo_response)
+  
   # If the response (from user input) needs converting
-  if(!possibly(is.list, FALSE)(response)){
+  if(!is.list(response)){
     if(quo_is_call(quo_response) && call_name(quo_response) == "c"){
       response[[1]] <- rlang::exprs
       response <- eval_tidy(quo_response)
@@ -64,8 +66,10 @@ as_fable.tbl_ts <- function(x, response, distribution, ...){
 #' @export
 as_fable.grouped_ts <- function(x, response, distribution, ...){
   quo_response <- enquo(response)
+  response <- possibly(eval_tidy, NULL)(quo_response)
+  
   # If the response (from user input) needs converting
-  if(!possibly(is.list, FALSE)(response)){
+  if(!is.list(response)){
     if(quo_is_call(quo_response) && call_name(quo_response) == "c"){
       quo_response[[1]] <- rlang::exprs
       response <- eval_tidy(quo_response)
@@ -138,7 +142,7 @@ validate_fable <- function(fbl){
     abort(sprintf("Could not find response variable(s) in the fable: %s", bad_resp))
   }
   if (!(chr_dist %in% names(fbl))){
-    abort(sprintf("Could not find distribution variable `%s` in the fable.",
+    abort(sprintf("Could not find distribution variable `%s` in the fable. A fable must contain a distribution, if you want to remove it convert to a tsibble with `as_tsibble()`.",
                   chr_dist))
   }
   if (!inherits(fbl[[chr_dist]], "fcdist")){

@@ -4,8 +4,7 @@
 \alias{autoplot.dcmp_ts}
 \title{Decomposition plots}
 \usage{
-\method{autoplot}{dcmp_ts}(object, .vars = NULL, scale_bars = TRUE,
-  ...)
+\method{autoplot}{dcmp_ts}(object, .vars = NULL, scale_bars = TRUE, ...)
 }
 \arguments{
 \item{object}{A dable.}
@@ -26,7 +25,8 @@ if (requireNamespace("feasts", quietly = TRUE)) {
 library(feasts)
 library(tsibbledata)
 aus_production \%>\% 
-  STL(Beer) \%>\% 
+  model(STL(Beer)) \%>\%
+  components() \%>\%  
   autoplot()
 }
 

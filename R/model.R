@@ -30,7 +30,7 @@ model <- function(.data, ...){
 #' 
 #' 
 #' @examples 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#' if (requireNamespace("fable", quietly = TRUE) && requireNamespace("tsibbledata", quietly = TRUE)) {
 #' library(fable)
 #' library(tsibbledata)
 #' 
@@ -39,10 +39,13 @@ model <- function(.data, ...){
 #'   model(ets = ETS(log(Beer) ~ error("M") + trend("Ad") + season("A")))
 #' 
 #' # Training a seasonal naive and ETS(A,A,A) model to the monthly 
-#' # "Food retailing" turnover for each Australian state/territory.
+#' # "Food retailing" turnover for selected Australian states.
 #' library(dplyr)
 #' aus_retail %>% 
-#'   filter(Industry == "Food retailing") %>% 
+#'   filter(
+#'     Industry == "Food retailing",
+#'     State %in% c("Victoria", "New South Wales", "Queensland")
+#'   ) %>% 
 #'   model(
 #'     snaive = SNAIVE(Turnover),
 #'     ets = ETS(log(Turnover) ~ error("A") + trend("A") + season("A")),
@@ -65,7 +68,6 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
   num_key <- n_keys(.data)
   num_mdl <- length(models)
   num_est <- num_mdl * num_key
-  pb <- dplyr::progress_estimated(num_est, min_time = 5)
   
   keys <- key(.data)
   .data <- nest_keys(.data, "lst_data")
@@ -83,22 +85,27 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
   }
   
   if(is_attached("package:future")){
-    require_package("furrr")
+    require_package("future.apply")
     eval_models <- function(models, lst_data){
-      out <- furrr::future_map2(
+      out <- future.apply::future_mapply(
         rep(lst_data, length(models)),
         rep(models, each = length(lst_data)),
-        estimate, .progress = isTRUE(getOption("dplyr.show_progress")) && interactive() && is.null(getOption("knitr.in.progress"))
+        FUN = estimate,
+        SIMPLIFY = FALSE,
+        future.globals = FALSE
       )
       unname(split(out, rep(seq_len(num_mdl), each = num_key)))
     }
   }
   else{
+    pb <- if(num_est > 1) dplyr::progress_estimated(num_est, min_time = 5) else NULL
     eval_models <- function(models, lst_data){
       map(models, function(model){
         map(lst_data, function(dt, mdl){
           out <- estimate(dt, mdl)
-          pb$tick()$print()
+          if(!is.null(pb)){
+            pb$tick()$print()
+          }
           out
         }, model)
       })

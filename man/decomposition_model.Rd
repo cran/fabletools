@@ -4,16 +4,12 @@
 \alias{decomposition_model}
 \title{Decomposition modelling}
 \usage{
-decomposition_model(dcmp_fn, formula, ..., dcmp_args = list())
+decomposition_model(dcmp, ...)
 }
 \arguments{
-\item{dcmp_fn}{The decomposition function}
-
-\item{formula}{The formula used to describe the decomposition}
+\item{dcmp}{A model definition which supports extracting decomposed \code{\link[=components]{components()}}.}
 
 \item{...}{Model definitions used to model the components}
-
-\item{dcmp_args}{Arguments to be passed to the decomposition function (\code{.dcmp_fn})}
 }
 \description{
 This function allows you to specify a decomposition combination model using
@@ -38,13 +34,14 @@ vic_food <- tsibbledata::aus_retail \%>\%
   
 # Identify an appropriate decomposition
 vic_food \%>\% 
-  STL(log(Turnover) ~ season(window = Inf)) \%>\% 
+  model(STL(log(Turnover) ~ season(window = Inf))) \%>\% 
+  components() \%>\% 
   autoplot()
   
 # Use an ARIMA model to seasonally adjusted data, and SNAIVE to season_year
 # Any model can be used, and seasonal components will default to use SNAIVE.
 my_dcmp_spec <- decomposition_model(
-  STL, log(Turnover) ~ season(window = Inf),
+  STL(log(Turnover) ~ season(window = Inf)),
   ETS(season_adjust ~ season("N")), SNAIVE(season_year)
 )
 
@@ -56,5 +53,5 @@ vic_food \%>\%
 
 }
 \seealso{
-\href{https://otexts.com/fpp3/forecasting-decomposition.html}{Forecasting: Principles and Practice - Forecasting Decomposition}
+\href{https://otexts.com/fpp3/forecasting-decomposition.html}{\emph{Forecasting: Principles and Practice} - Forecasting Decomposition}
 }

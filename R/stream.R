@@ -17,20 +17,18 @@ stream <- function(object, ...){
 #' @rdname stream
 #' @export
 stream.mdl_df <- function(object, new_data, ...){
-  object %>%
-    bind_new_data(new_data) %>% 
-    gather(".model", ".fit", !!!syms(object%@%"models")) %>% 
-    as_tibble %>% 
-    transmute(
-      !!!key(object),
-      !!sym(".model"),
-      .fit = map2(!!sym(".fit"), !!sym("new_data"), stream, ...)
-    ) %>%
-    spread(".model", ".fit") %>% 
-    as_mable(key = key(object), models = object%@%"models")
+  mdls <- object%@%"models"
+  new_data <- bind_new_data(object, new_data)
+  object %>% 
+    dplyr::mutate_at(vars(!!!mdls),
+                     stream, new_data[["new_data"]], ...)
 }
 
-#' @rdname stream
+#' @export
+stream.lst_mdl <- function(object, new_data, ...){
+  add_class(map2(object, new_data, stream, ...), class(object))
+}
+
 #' @export
 stream.mdl_ts <- function(object, new_data, ...){
   # Compute specials with new_data
