@@ -1,11 +1,12 @@
+names_no_null <- function(x){
+  names(x) %||% rep_along(x, "")
+}
+
 # Small function to combine named lists
 merge_named_list <- function(...){
-  all_names <- dots_list(...) %>% map(names) %>% invoke(c, .) %>% unique
-  all_names %>%
-    map(function(name){
-      dots_list(...) %>% map(function(vals) vals[[name]]) %>% invoke(c, .)
-    }) %>%
-    set_names(all_names)
+  flat <- flatten(list(...))
+  nm <- names_no_null(flat)
+  map(split(flat, nm), function(x) flatten(unname(x)))
 }
 
 add_class <- function(x, new_class){
@@ -42,9 +43,12 @@ make_future_data <- function(.data, h = NULL){
   
   idx <- index_var(.data)
   itvl <- interval(.data)
-  tunit <- time_unit(itvl)
+  tunit <- default_time_units(itvl)
   
   idx_max <- max(.data[[idx]])
+  if(is.factor(idx_max)){
+    abort("Cannot automatically create `new_data` from a factor/ordered time index. Please provide `new_data` directly.")
+  }
   
   .data <- list2(!!idx := seq(idx_max, by = tunit, length.out = n+1)[-1])
   build_tsibble_meta(
@@ -120,10 +124,11 @@ unnest_tbl <- function(.data, tbl_col, .sep = NULL){
   nested_cols <- map(tbl_col, function(x){
     lst_col <- .data[[x]]
     if(is.data.frame(lst_col[[1]])){
-      dplyr::bind_rows(!!!set_names(lst_col, rep(x, length(lst_col))))
+      lst_col <- map(lst_col, as_tibble)
+      vctrs::vec_rbind(!!!lst_col)
     }
     else{
-      list2(!!x := unlist(lst_col))
+      unlist(lst_col)
     }
   })
   
@@ -134,9 +139,11 @@ unnest_tbl <- function(.data, tbl_col, .sep = NULL){
     )
   }
   
-  dplyr::bind_cols(
+  is_df <- map_lgl(nested_cols, is.data.frame)
+  vctrs::vec_cbind(
     .data[row_indices, setdiff(names(.data), tbl_col), drop = FALSE], # Parent cols
-    !!!nested_cols # Nested cols
+    !!!set_names(nested_cols[!is_df], tbl_col[!is_df]), # Nested cols
+    !!!nested_cols[is_df] # Nested df
   )
 }
 
@@ -201,7 +208,7 @@ bind_row_attrb <- function(x){
   attrb <- transpose(map(x, function(dt) map(dt, attributes)))
   simple_attrb <- map_lgl(attrb, function(x) length(unique(x)) == 1)
   
-  x <- dplyr::bind_rows(!!!x)
+  x <- vctrs::vec_rbind(!!!x)
   
   for (col in which(simple_attrb)){
     attributes(x[[col]]) <- attrb[[col]][[1]]

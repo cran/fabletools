@@ -9,19 +9,15 @@ parse_specials <- function(call = NULL, specials = NULL){
                             .f = function(.x, ...) {
                               merge_named_list(.x[[1]], .x[[2]])},
                             .g = function(.x){ 
-                              .x %>%
-                                get_expr %>% # Extract call
-                                as.list %>% # Split call components
-                                .[-1] %>% # Drop function operator (as it is known to be "+")
-                                map(expr) # Rebuild quosure for recursive map
+                              map(as.list(get_expr(.x))[-1], expr)
                             },
                             .h = function(x){ # Base types
                               x <- get_expr(x)
                               if(!is_call(x) || !(call_name(x) %in% nm)){
-                                list(xreg = list(x))
+                                list(list(x))
                               }
                               else{# Current call is a special function
-                                list(list(x)) %>% set_names(call_name(x))
+                                set_names(list(list(x)), call_name(x))
                               }
                             },
                             base = function(.x){
@@ -33,9 +29,10 @@ parse_specials <- function(call = NULL, specials = NULL){
     parsed <- list()
   }
   
-  # Wrap xreg inputs into xreg()
-  if(!is.null(parsed$xreg)){
-    parsed$xreg <- list(call2("xreg", !!!parsed$xreg))
+  bare_xreg <- names_no_null(parsed) == ""
+  if(any(bare_xreg)){
+    parsed$xreg[[length(parsed$xreg) + 1]] <- expr((!!sym("xreg"))(!!!parsed[[which(bare_xreg)]]))
+    parsed[[which(bare_xreg)]] <- NULL
   }
   
   # Add required_specials
@@ -98,7 +95,7 @@ parse_model <- function(model){
   list2(
     model = model,
     !!!parse_model_lhs(model),
-    !!!parse_model_rhs(model)
+    specials = parse_model_rhs(model)
   )
 }
 
@@ -113,11 +110,9 @@ parse_model_rhs <- function(model){
   # }
   rhs <- model_rhs(model)
   specials <- parse_specials(rhs, specials = model$specials)
-  list(
-    specials = map(specials, function(.x){
+  map(specials, function(.x){
       map(.x, eval_tidy, data = model$data, env = model$specials)
-    })
-  )
+  })
 }
 
 #' Parse the RHS of the model formula for transformations

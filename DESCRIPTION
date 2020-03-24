@@ -1,5 +1,5 @@
 Package: fabletools
-Version: 0.1.2
+Version: 0.1.3
 Title: Core Tools for Packages in the 'fable' Framework
 Description: Provides tools, helpers and data structures for developing models and time series functions for 'fable' and extension packages. These tools support a consistent and tidy interface for time series modelling and analysis.
 Authors@R: 
@@ -28,14 +28,15 @@ Suggests: colorspace, covr, crayon, digest, fable, future.apply, knitr,
         scales, spelling, testthat, tsibbledata, lubridate, SparseM
 ByteCompile: true
 License: GPL-3
-URL: http://fabletools.tidyverts.org/
+URL: http://fabletools.tidyverts.org/,
+        https://github.com/tidyverts/fabletools
 BugReports: https://github.com/tidyverts/fabletools/issues
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.0.2
+RoxygenNote: 7.0.2.9000
 Language: en-GB
 NeedsCompilation: no
-Packaged: 2020-01-20 00:38:55 UTC; mitchell
+Packaged: 2020-03-23 23:52:54 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre],
   Rob Hyndman [aut],
   Earo Wang [aut],
@@ -43,4 +44,4 @@ Author: Mitchell O'Hara-Wild [aut, cre],
   George Athanasopoulos [ctb]
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2020-01-29 09:00:02 UTC
+Date/Publication: 2020-03-24 07:10:02 UTC

@@ -60,8 +60,12 @@ as_mable.tbl_df <- function(x, key = NULL, models = NULL, ...){
     }
   }
   
+  if(is_empty(models)){
+    abort("A mable must contain at least one model.")
+  }
+  
   tibble::new_tibble(x, key = key_data, models = models,
-                     nrow = NROW(x), subclass = "mdl_df")
+                     nrow = NROW(x), class = "mdl_df", subclass = "mdl_df")
 }
 
 #' @export
@@ -110,6 +114,13 @@ select.mdl_df <- function (.data, ...){
   as_mable(sel_data,
            key = if(key_nochange) key_data(.data) else key_vars,
            models = mdls)
+}
+
+#' @export
+`$<-.mdl_df` <- function (x, name, value) {
+  tbl <- NextMethod()
+  mdls <- names(which(map_lgl(tbl, inherits, "lst_mdl")))
+  as_mable(tbl, key = key_vars(x), models = mdls)
 }
 
 #' @export

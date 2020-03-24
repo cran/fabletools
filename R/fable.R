@@ -163,7 +163,8 @@ hilo.fbl_ts <- function(x, level = c(80, 95), ...){
     transmute(
       !!!(x%@%"response"),
       !!!set_names(map(level,function(.x) expr(hilo(!!(x%@%"dist"), !!.x))),
-                   paste0(level, "%")))
+                   paste0(level, "%"))
+    )
 }
 
 #' @export
@@ -214,7 +215,7 @@ rbind.fbl_ts <- function(...){
     abort("Cannot combine fables with different distribution names.")
   }
   out <- suppressWarnings(invoke("rbind", map(fbls, as_tsibble)))
-  class(out[[as_string(dist[[1]])]]) <- "fcdist"
+  class(out[[as_string(dist[[1]])]]) <- c("fcdist", "list")
   as_fable(out, response[[1]], !!dist[[1]])
 }
 

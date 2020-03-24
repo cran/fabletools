@@ -129,7 +129,7 @@ forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = TRU
   # Compute specials with new_data
   object$model$stage <- "forecast"
   object$model$add_data(new_data)
-  specials <- tryCatch(parse_model_rhs(object$model)$specials,
+  specials <- tryCatch(parse_model_rhs(object$model),
                        error = function(e){
                          abort(sprintf(
 "%s
@@ -165,7 +165,7 @@ These required variables can be provided by specifying `new_data`.",
     # Bias adjust transformation with sd
     bt <- map2(bt, fc[["sd"]], fabletools::bias_adjust)
   }
-  fc[["point"]] <- map2(fc[["point"]], bt, function(fc, bt) bt(fc))
+  fc[["point"]] <- map2(fc[["point"]], bt, function(fc, bt) as.numeric(bt(fc)))
   names(fc[["point"]]) <- map_chr(object$response, expr_text)
   
   idx <- index_var(new_data)
@@ -175,7 +175,7 @@ These required variables can be provided by specifying `new_data`.",
   new_data[[".distribution"]] <- fc[["dist"]]
   
   fbl <- build_tsibble_meta(
-    as_tibble(new_data)[c(idx, cn, mv)],
+    as_tibble(new_data)[unique(c(idx, cn, mv))],
     key_data(new_data),
     index = idx, index2 = idx, ordered = is_ordered(new_data),
     interval = interval(new_data)

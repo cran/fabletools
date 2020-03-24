@@ -90,8 +90,9 @@ combination_ensemble <- function(..., weights = c("equal", "inv_var")){
     out$response <- mdls[[1]]$response
   }
   else{
-    out <- add_class(map(out, `[[<-`, "response", mdls[[1]][[1]]$response), 
-                     "lst_mdl")
+    out <- structure(
+      map(out, `[[<-`, "response", mdls[[1]][[1]]$response), 
+      class = c("lst_mdl", "list"))
   }
   out
 }
@@ -220,7 +221,7 @@ Ops.mdl_ts <- function(e1, e2){
 
 #' @export
 Ops.lst_mdl <- function(e1, e2){
-  add_class(map2(e1, e2, .Generic), "lst_mdl")
+  structure(map2(e1, e2, .Generic), class = c("lst_mdl", "list"))
 }
 
 #' @importFrom stats var
@@ -268,7 +269,7 @@ forecast.model_combination <- function(object, new_data, specials, ...){
   if(is_dist_normal(.dist)){
     .dist <- add_class(
       map2(.dist, fc_cov, function(x, cov) {x$sd <- sqrt(x$sd^2 + 2*cov); x}),
-      "fcdist")
+      c("fcdist", "list"))
   }
   
   .fc <- eval_tidy(expr, map(object, function(x) 

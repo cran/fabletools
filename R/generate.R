@@ -33,7 +33,7 @@ generate.mdl_df <- function(x, new_data = NULL, h = NULL, times = 1, seed = NULL
   if(!is.null(new_data)){
     x <- bind_new_data(x, new_data)
   }
-  x <- gather(x, ".model", ".sim", !!!syms(mdls))
+  x <- as_tibble(gather(x, ".model", ".sim", !!!syms(mdls)))
   
   # Evaluate simulations
   x$.sim <- map2(x[[".sim"]], 
@@ -72,7 +72,7 @@ generate.mdl_ts <- function(x, new_data = NULL, h = NULL, times = 1, seed = NULL
   # Compute specials with new_data
   x$model$stage <- "generate"
   x$model$add_data(new_data)
-  specials <- tryCatch(parse_model_rhs(x$model)$specials,
+  specials <- tryCatch(parse_model_rhs(x$model),
                        error = function(e){
                          abort(sprintf(
                            "%s
