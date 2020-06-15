@@ -7,18 +7,27 @@
 \usage{
 \method{autoplot}{fbl_ts}(object, data = NULL, level = c(80, 95), show_gap = TRUE, ...)
 
-\method{autolayer}{fbl_ts}(object, data = NULL, level = c(80, 95), show_gap = TRUE, ...)
+\method{autolayer}{fbl_ts}(
+  object,
+  data = NULL,
+  level = c(80, 95),
+  point_forecast = list(mean = mean),
+  show_gap = TRUE,
+  ...
+)
 }
 \arguments{
 \item{object}{A fable.}
 
 \item{data}{A tsibble with the same key structure as the fable.}
 
-\item{level}{The confidence levels for the plotted prediction intervals.}
+\item{level}{The confidence level(s) for the plotted intervals.}
 
-\item{show_gap}{Setting this to \code{FALSE} will connect the historical observations with the forecasts.}
+\item{show_gap}{Setting this to \code{FALSE} will connect the most recent value in \code{data} with the forecasts.}
 
 \item{...}{Further arguments passed used to specify fixed aesthetics for the forecasts such as \code{colour = "red"} or \code{size = 3}.}
+
+\item{point_forecast}{The point forecast measure to be displayed in the plot.}
 }
 \description{
 Produces a forecast plot from a fable. As the original data is not included

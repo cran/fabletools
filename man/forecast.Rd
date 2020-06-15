@@ -3,11 +3,27 @@
 \name{forecast}
 \alias{forecast}
 \alias{forecast.mdl_df}
+\alias{forecast.mdl_ts}
 \title{Produce forecasts}
 \usage{
 forecast(object, ...)
 
-\method{forecast}{mdl_df}(object, new_data = NULL, h = NULL, bias_adjust = TRUE, ...)
+\method{forecast}{mdl_df}(
+  object,
+  new_data = NULL,
+  h = NULL,
+  point_forecast = list(.mean = mean),
+  ...
+)
+
+\method{forecast}{mdl_ts}(
+  object,
+  new_data = NULL,
+  h = NULL,
+  bias_adjust = NULL,
+  point_forecast = list(.mean = mean),
+  ...
+)
 }
 \arguments{
 \item{object}{The time series model used to produce the forecasts}
@@ -19,8 +35,26 @@ forecast(object, ...)
 \item{h}{The forecast horison (can be used instead of \code{new_data} for regular
 time series with no exogenous regressors).}
 
-\item{bias_adjust}{Use adjusted back-transformed mean for transformations.
-Refer to \code{vignette("transformations", package = "fable")} for more details.}
+\item{point_forecast}{The point forecast measure(s) which should be returned
+in the resulting fable. Specified as a named list of functions which accept
+a distribution and return a vector. To compute forecast medians, you can use
+\code{list(.median = median)}.}
+
+\item{bias_adjust}{Deprecated. Please use \code{point_forecast} to specify the
+desired point forecast method.}
+}
+\value{
+A fable containing the following columns:
+\itemize{
+\item \code{.model}: The name of the model used to obtain the forecast. Taken from
+the column names of models in the provided mable.
+\item The point forecast, which by default is the mean. The name of this column
+will be the same as the dependent variable in the model(s).
+\item \code{.distribution}. A column of objects of class \code{fcdist}, representing the
+statistical distribution of the forecast in the given time period.
+\item All columns in \code{new_data}, excluding those whose names conflict with the
+above.
+}
 }
 \description{
 The forecast function allows you to produce future predictions of a time series
@@ -35,7 +69,7 @@ The forecasts returned contain both point forecasts and their distribution.
 A specific forecast interval can be extracted from the distribution using the
 \code{\link[=hilo]{hilo()}} function, and multiple intervals can be obtained using \code{\link[=report]{report()}}.
 These intervals are stored in a single column using the \code{hilo} class, to
-extract the numerical upper and lower bounds you can use \code{\link[tidyr:unnest]{tidyr::unnest()}}.
+extract the numerical upper and lower bounds you can use \code{\link[tidyr:nest]{tidyr::unnest()}}.
 }
 \examples{
 if (requireNamespace("fable", quietly = TRUE)) {

@@ -12,22 +12,22 @@ report <- function(object, ...){
 
 #' @export
 report.mdl_df <- function(object, ...){
-  if(NROW(object) > 1 || length(object%@%"models") > 1){
+  if(NROW(object) > 1 || length(mable_vars(object)) > 1){
     warning("Model reporting is only supported for individual models, so a glance will be shown. To see the report for a specific model, use `select()` and `filter()` to identify a single model.")
-    glance(object)
+    return(glance(object))
   }
   else{
-    report(object[[(object%@%"models")[[1]]]][[1]])
+    report(object[[mable_vars(object)[[1]]]][[1]])
   }
   invisible(object)
 }
 
 #' @export
 report.mdl_ts <- function(object, ...){
-  cat(paste("Series:", paste0(map(object$response, expr_text), collapse = ", "), "\n"))
+  cat(paste("Series:", paste0(map(object$response, expr_name), collapse = ", "), "\n"))
   cat(paste("Model:", model_sum(object), "\n"))
   if(!is_symbol(body(object$transformation[[1]])) && length(object$response) == 1){
-    cat(paste("Transformation:", expr_text(body(object$transformation[[1]])), "\n"))
+    cat(paste("Transformation:", expr_name(body(object$transformation[[1]])), "\n"))
   }
   tryCatch(
     report(object[["fit"]]),

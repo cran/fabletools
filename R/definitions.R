@@ -12,12 +12,6 @@ model_definition <- R6::R6Class(NULL,
     initialize = function(formula, ..., .env){
       self$formula <- enquo(formula)
       
-      if(possibly(compose(is.data.frame, eval_tidy), FALSE)(self$formula)){
-        abort(
-"A model specification is trained to a dataset using the `model()` function.
-Refer to the documentation in ?model for more details.")
-      }
-      
       # self$env <- .env
       # Create specials environment with user's scoping
       specials_env <- new_environment(parent = .env)
@@ -127,8 +121,9 @@ new_model_class <- function(model = "Unknown model",
 }
 
 #' @rdname new-model-class
-#' @param .class A model class (typically created with [new_model_class()])
+#' @param formula The user's model formula.
+#' @param .class A model class (typically created with [new_model_class()]).
 #' @export
-new_model_definition <- function(.class, ..., .env = caller_env(n = 2)){
-  add_class(.class$new(..., .env = .env), "mdl_defn")
+new_model_definition <- function(.class, formula, ..., .env = caller_env(n = 2)){
+  add_class(.class$new({{formula}}, ..., .env = .env), "mdl_defn")
 }

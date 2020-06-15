@@ -17,8 +17,17 @@
 #'
 #' @export
 dable <- function(..., response, method = NULL, seasons = list(), aliases = list()){
-  tsbl <- tsibble(...)
-  as_dable(tsbl, !!enexpr(response), method = method, seasons = seasons, aliases = aliases)
+  build_dable(tsibble(...), method = method, response = !!enquo(response), 
+              seasons = seasons, aliases = aliases)
+}
+
+#' Is the object a dable
+#' 
+#' @param x An object.
+#' 
+#' @export
+is_dable <- function(x){
+  inherits(x, "dcmp_ts")
 }
 
 #' Coerce to a dable object
@@ -35,8 +44,8 @@ as_dable <- function(x, ...){
 #' @rdname as-dable
 #' @export
 as_dable.tbl_df <- function(x, response, method = NULL, seasons = list(), aliases = list(), ...){
-  as_dable(as_tsibble(x, ...), response = !!enexpr(response), method = method,
-           seasons = seasons, aliases = aliases)
+  build_dable(x, method = method, response = !!enquo(response), 
+              seasons = seasons, aliases = aliases)
 }
 
 #' @rdname as-dable
@@ -45,7 +54,13 @@ as_dable.tbl_df <- function(x, response, method = NULL, seasons = list(), aliase
 #' 
 #' @export
 as_dable.tbl_ts <- function(x, response, method = NULL, seasons = list(), aliases = list(), ...){
-  new_tsibble(x, method = method, response = enexpr(response), 
+  build_dable(x, method = method, response = !!enquo(response), 
+              seasons = seasons, aliases = aliases)
+}
+
+build_dable <- function (x, response, method = NULL, seasons = list(), aliases = list()) {
+  response <- names(x)[tidyselect::eval_select(enquo(response), x)]
+  new_tsibble(x, method = method, response = response, 
               seasons = seasons, aliases = aliases, class = "dcmp_ts")
 }
 
@@ -56,12 +71,21 @@ as_tsibble.dcmp_ts <- function(x, ...){
 
 #' @export
 `[.dcmp_ts` <- function (x, i, j, drop = FALSE){
-  as_dable(NextMethod(), response = !!(x%@%"response"), method = x%@%"method",
-           seasons = x%@%"seasons", aliases = x%@%"aliases")
+  out <- NextMethod()
+  # Drop dable if tsibble is dropped
+  
+  cn <- colnames(out)
+  not_dable <- !(response_vars(x) %in% cn) || !is_tsibble(out)
+  
+  if(not_dable)
+    return(out)
+  else
+    as_dable(out, response = response_vars(x), method = x%@%"method",
+             seasons = x%@%"seasons", aliases = x%@%"aliases")
 }
 
 tbl_sum.dcmp_ts <- function(x){
-  response <- as_string(x%@%"response")
+  response <- response_vars(x)
   method <- expr_text((x%@%"aliases")[[response]])
   out <- NextMethod()
   names(out)[1] <- "A dable"
@@ -71,6 +95,7 @@ tbl_sum.dcmp_ts <- function(x){
 
 #' @export
 rbind.dcmp_ts <- function(...){
+  .Deprecated("bind_rows()")
   dots <- dots_list(...)
   
   attrs <- combine_dcmp_attr(dots)
@@ -81,7 +106,7 @@ rbind.dcmp_ts <- function(...){
 }
 
 combine_dcmp_attr <- function(lst_dcmp){
-  resp <- map(lst_dcmp, function(x) x%@%"response")
+  resp <- map(lst_dcmp, response_vars)
   method <- map(lst_dcmp, function(x) x%@%"method")
   strc <- map(lst_dcmp, function(x) x%@%"seasons")
   aliases <- map(lst_dcmp, function(x) x%@%"aliases")

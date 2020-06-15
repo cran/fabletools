@@ -70,6 +70,11 @@ bind_new_data <- function(object, new_data){
   
   if(length(key_vars(object)) > 0){
     object <- left_join(object, new_data, by = key_vars(object))
+    # Use empty tsibbles for non-matches
+    no_new_data <- map_lgl(object[["new_data"]], is_null)
+    if(any(no_new_data)){
+      object[["new_data"]][no_new_data] <- rep(list(new_data[["new_data"]][[1]][0,]), sum(no_new_data))
+    }
   }
   else{
     object[["new_data"]] <- new_data[["new_data"]]
@@ -218,4 +223,22 @@ bind_row_attrb <- function(x){
 
 is.formula <- function(x) {
   inherits(x, "formula")
+}
+
+# tsibble:::assert_key_data
+assert_key_data <- function (x) {
+  nc <- NCOL(x)
+  if (is_false(is.data.frame(x) && nc > 0 && is.list(x[[nc]]) && 
+               names(x)[[nc]] == ".rows")) {
+    abort("The `key` attribute must be a data frame with its last column called `.rows`.")
+  }
+}
+
+flatten_with_names <- function (x, sep = "_") {
+  if(is_empty(x)) return(x)
+  if(!is.list(x[[1]])) return(as.list(x))
+  x <- map2(x, names(x), function(x, nm){
+    if(!is.null(names(x))) set_names(x, paste(nm, names(x), sep = sep)) else x
+  })
+  flatten(unname(map(x, flatten_with_names, sep = sep)))
 }

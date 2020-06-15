@@ -43,12 +43,26 @@ MASE <- function(.resid, .train, demean = FALSE, na.rm = TRUE, .period, d = .per
     .train <- diff(.train, differences = d)
   }
   if(demean){
-    scale <- mean(abs(.train - mean(.train, na.rm = na.rm)), na.rm = na.rm)
+    .train <- .train - mean(.train, na.rm = na.rm)
   }
-  else{
-    scale <- mean(abs(.train), na.rm = na.rm)
+  scale <- mean(abs(.train), na.rm = na.rm)
+  mean(abs(.resid / scale), na.rm = na.rm)
+}
+
+#' @rdname point_accuracy_measures
+#' @export
+RMSSE <- function(.resid, .train, demean = FALSE, na.rm = TRUE, .period, d = .period == 1, D = .period > 1, ...){
+  if (D > 0) { # seasonal differencing
+    .train <- diff(.train, lag = .period, differences = D)
   }
-  mase <- mean(abs(.resid / scale), na.rm = na.rm)
+  if (d > 0) {
+    .train <- diff(.train, differences = d)
+  }
+  if(demean){
+    .train <- .train - mean(.train, na.rm = na.rm)
+  }
+  scale <- mean(.train^2, na.rm = na.rm)
+  sqrt(mean(.resid^2 / scale, na.rm = na.rm))
 }
 
 #' @rdname point_accuracy_measures
@@ -57,6 +71,21 @@ ACF1 <- function(.resid, na.action = stats::na.pass, demean = TRUE, ...){
   stats::acf(.resid, plot = FALSE, lag.max = 2, na.action = na.action, 
              demean = demean)$acf[2, 1, 1]
 }
+
+#' Mean Arctangent Absolute Percentage Error
+#' 
+#' @inheritParams point_accuracy_measures
+#' 
+#' @references 
+#' Kim, Sungil and Heeyoung Kim (2016) "A new metric of absolute percentage error
+#' for intermittent demand forecasts". \emph{International Journal of Forecasting},
+#' \bold{32}(3), 669-679.
+#' 
+#' @export
+MAAPE <- function(.resid, .actual, na.rm = TRUE, ...){
+  mean(atan(abs(.resid / .actual * 100)), na.rm = na.rm)
+}
+
 #' Point estimate accuracy measures
 #' 
 #' @param .resid A vector of residuals from either the training (model accuracy)
@@ -80,28 +109,14 @@ ACF1 <- function(.resid, na.action = stats::na.pass, demean = TRUE, ...){
 point_accuracy_measures <- list(ME = ME, RMSE = RMSE, MAE = MAE,
                        MPE = MPE, MAPE = MAPE, MASE = MASE, ACF1 = ACF1)
 
-#' Mean Arctangent Absolute Percentage Error
-#' 
-#' @inheritParams point_accuracy_measures
-#' 
-#' @references 
-#' Kim, Sungil and Heeyoung Kim (2016) "A new metric of absolute percentage error
-#' for intermittent demand forecasts". \emph{International Journal of Forecasting},
-#' \bold{32}(3), 669-679.
-#' 
-#' @export
-MAAPE <- function(.resid, .actual, na.rm = TRUE, ...){
-  mean(atan(abs(.resid / .actual * 100)), na.rm = na.rm)
-}
-
 #' @rdname interval_accuracy_measures
 #' @export
 winkler_score <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
   interval <- hilo(.dist, level)
-  if(NROW(interval[[1]]) > 1) abort("Winkler scores are not supported for multivariate distributions.")
+  if(!inherits(interval, "hilo")) abort("Winkler scores are not supported for multivariate distributions.")
   alpha <- 1-level/100
-  lt <- interval$.lower
-  ut <- interval$.upper
+  lt <- vctrs::vec_proxy(interval)$lower
+  ut <- vctrs::vec_proxy(interval)$upper
   score <- ifelse(
     .actual < lt, 
       (ut - lt) + (2/alpha)*(lt-.actual),
@@ -112,6 +127,35 @@ winkler_score <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
     ut-lt)
   )
   mean(score, na.rm = na.rm)
+}
+
+#' @rdname interval_accuracy_measures
+#' @export
+pinball_loss <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
+  q <- quantile(.dist, level/100)
+  loss <- ifelse(.actual>=q, level/100 * (.actual-q), (1-level/100) * (q-.actual))
+  mean(loss, na.rm = na.rm)
+}
+
+#' @rdname interval_accuracy_measures
+#' @export
+scaled_pinball_loss <- function(.dist, .actual, .train, level = 95, na.rm = TRUE,
+                                demean = FALSE, .period, d = .period == 1, 
+                                D = .period > 1, ...){
+  if (D > 0) { # seasonal differencing
+    .train <- diff(.train, lag = .period, differences = D)
+  }
+  if (d > 0) {
+    .train <- diff(.train, differences = d)
+  }
+  if(demean){
+    .train <- .train - mean(.train, na.rm = na.rm)
+  }
+  scale <- mean(abs(.train), na.rm = na.rm)
+  
+  q <- quantile(.dist, level/100)
+  loss <- ifelse(.actual>=q, level/100 * (.actual-q), (1-level/100) * (q-.actual))
+  mean(loss/scale, na.rm = na.rm)
 }
 
 #' Interval estimate accuracy measures
@@ -127,10 +171,10 @@ interval_accuracy_measures <- list(winkler = winkler_score)
 #' @export
 percentile_score <- function(.dist, .actual, na.rm = TRUE, ...){
   probs <- seq(0.01, 0.99, 0.01)
-  percentiles <- quantile(.dist, probs)
-  if(length(percentiles[[1]]) > 1) abort("Percentile scores are not supported for multivariate distributions.")
+  percentiles <- map(probs, quantile, x = .dist)
+  if(!is.numeric(percentiles[[1]])) abort("Percentile scores are not supported for multivariate distributions.")
   map2_dbl(percentiles, probs, function(percentile, prob){
-    L <- ifelse(.actual < percentile[[1]], (1-prob), prob)*abs(percentile[[1]]-.actual)
+    L <- ifelse(.actual < percentile, (1-prob), prob)*abs(percentile-.actual)
     mean(L, na.rm = na.rm)
   }) %>% 
     mean(na.rm = na.rm)
@@ -139,23 +183,30 @@ percentile_score <- function(.dist, .actual, na.rm = TRUE, ...){
 #' @rdname distribution_accuracy_measures
 #' @export
 CRPS <- function(.dist, .actual, n_quantiles = 1000, na.rm = TRUE, ...){
-  if(is_dist_normal(.dist)){
-    mean <- map_dbl(.dist, `[[`, "mean")
-    sd <- map_dbl(.dist, `[[`, "sd")
-    z <- (.actual-mean)/sd
-    z <- sd*(z*(2*stats::pnorm(z)-1)+2*stats::dnorm(z)-1/sqrt(pi))
-    mean(z, na.rm = na.rm)
+  is_normal <- map_lgl(.dist, inherits, "dist_normal")
+  z <- rep(NA_real_, length(.dist))
+  
+  if(any(is_normal)){
+    mean <- mean(.dist[is_normal])
+    sd <- sqrt(distributional::variance(.dist[is_normal]))
+    zn <- (.actual[is_normal]-mean)/sd
+    zn <- sd*(zn*(2*stats::pnorm(zn)-1)+2*stats::dnorm(zn)-1/sqrt(pi))
+    z[is_normal] <- zn
   }
-  else{
+  
+  if(any(!is_normal)){
     probs <- seq(0, 1, length.out = n_quantiles + 2)[seq_len(n_quantiles) + 1]
-    percentiles <- quantile(.dist, probs)
-    if(length(percentiles[[1]]) > 1) abort("Percentile scores are not supported for multivariate distributions.")
-    z <- map2_dbl(percentiles, probs, function(percentile, prob){
-      L <- ifelse(.actual < percentile[[1]], (1-prob), prob)*abs(percentile[[1]]-.actual)
+    percentiles <- map(probs, quantile, x = .dist[!is_normal])
+    if(!is.numeric(percentiles[[1]])) abort("Percentile scores are not supported for multivariate distributions.")
+    za <- map2_dbl(percentiles, probs, function(percentile, prob){
+      L <- ifelse(.actual[!is_normal] < percentile, (1-prob), prob)*abs(percentile-.actual[!is_normal])
       mean(L, na.rm = na.rm)
     })
-    2 * mean(z, na.rm = na.rm)
+    
+    z[!is_normal] <- za*2
   }
+  
+  mean(z, na.rm = na.rm)
 }
 
 #' Distribution accuracy measures
@@ -223,7 +274,7 @@ accuracy <- function(object, ...){
 #' @export
 accuracy.mdl_df <- function(object, measures = point_accuracy_measures, ...){
   as_tibble(object) %>% 
-    gather(".model", "fit", !!!syms(object%@%"models")) %>% 
+    tidyr::pivot_longer(mable_vars(object), names_to = ".model", values_to = "fit") %>% 
     mutate(fit = map(!!sym("fit"), accuracy, measures = measures, ...)) %>% 
     unnest_tbl("fit")
 }
@@ -299,24 +350,12 @@ accuracy.mdl_ts <- function(object, measures = point_accuracy_measures, ...){
 #' @export
 accuracy.fbl_ts <- function(object, data, measures = point_accuracy_measures, ..., 
                             by = NULL){
-  resp <- object%@%"response"
-  dist <- object%@%"dist"
+  resp <- response_vars(object)
+  dist <- sym(distribution_var(object))
   
   if(is.null(by)){
-    by <- intersect(c(".model", ".response", key_vars(data)), colnames(object))
-  }
-  
-  if(length(resp) > 1){
-    object <- as_tsibble(object) %>% 
-      # select(!!expr(-!!attr(object, "dist"))) %>% 
-      gather(".response", "value", !!!resp, factor_key = TRUE)
-    data <- gather(data, ".response", "value", !!!resp, factor_key = TRUE)
-    resp <- sym("value")
-    by <- union(by, ".response")
-    # abort("Accuracy evaluation is not yet supported for multivariate forecasts.")
-  }
-  else{
-    resp <- resp[[1]]
+    by <- intersect(c(".model", key_vars(data)), colnames(object))
+    if(length(resp) > 1) by <- c(by, ".response")
   }
   
   grp <- c(syms(by), groups(object))
@@ -339,10 +378,22 @@ accuracy.fbl_ts <- function(object, data, measures = point_accuracy_measures, ..
   }
   
   # Compute .fc, .dist, .actual and .resid
-  aug <- transmute(object, .fc = !!resp, .dist = !!dist, !!!syms(by))
-  aug <- left_join(aug,
-      transmute(data, !!index(data), .actual = !!resp),
-      by = intersect(colnames(data), by),
+  object <- as_tsibble(object)
+  
+  if(mv <- length(resp) > 1){
+    aug <- object <- tidyr::pivot_longer(
+      transmute(object, mean(!!dist), .dist = !!dist, !!!syms(intersect(by, colnames(object)))),
+      !!resp, names_to = ".response", values_to = ".fc")
+    aug_dt <- data <- tidyr::pivot_longer(
+      transmute(data, !!index(data), !!!syms(resp)),
+      !!resp, names_to = ".response", values_to = ".actual")
+    resp <- ".actual"
+  } else {
+    aug <- transmute(object, .fc = mean(!!dist), .dist = !!dist, !!!syms(by))
+    aug_dt <- transmute(data, !!index(data), .actual = !!sym(resp))
+  }
+  aug <- left_join(aug, aug_dt,
+      by = intersect(colnames(aug_dt), by),
       suffix = c("", ".y")
     )
   aug <- summarise(group_by(as_tibble(aug), !!!grp),
@@ -356,12 +407,12 @@ accuracy.fbl_ts <- function(object, data, measures = point_accuracy_measures, ..
     cnds <- map2(syms(names(cnds)), cnds, function(x, y){
       if(is.na(y)) expr(is.na(!!x)) else expr(!!x == !!y)
     })
-    eval_tidy(resp, data = filter(data, !!index(data) < idx, !!!cnds))
+    eval_tidy(sym(resp), data = filter(data, !!index(data) < idx, !!!cnds))
   }
   mutual_keys <- intersect(key(data), key(object))
   mutual_keys <- set_names(mutual_keys, map_chr(mutual_keys, as_string))
   .train <- as_tibble(object) %>% 
-    group_by(!!!key(object), !!!grp) %>% 
+    group_by(!!!union(key(object), grp)) %>% 
     filter(dplyr::row_number() == which.min(!!index(object))) %>% 
     group_by(!!!grp) %>% 
     filter(dplyr::row_number() == which.max(!!index(object))) %>% 

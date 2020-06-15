@@ -9,10 +9,13 @@
 \alias{MPE}
 \alias{MAPE}
 \alias{MASE}
+\alias{RMSSE}
 \alias{ACF1}
 \alias{point_accuracy_measures}
 \title{Point estimate accuracy measures}
-\format{An object of class \code{list} of length 7.}
+\format{
+An object of class \code{list} of length 7.
+}
 \usage{
 ME(.resid, na.rm = TRUE, ...)
 
@@ -27,6 +30,17 @@ MPE(.resid, .actual, na.rm = TRUE, ...)
 MAPE(.resid, .actual, na.rm = TRUE, ...)
 
 MASE(
+  .resid,
+  .train,
+  demean = FALSE,
+  na.rm = TRUE,
+  .period,
+  d = .period == 1,
+  D = .period > 1,
+  ...
+)
+
+RMSSE(
   .resid,
   .train,
   demean = FALSE,

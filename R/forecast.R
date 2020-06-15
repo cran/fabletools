@@ -24,10 +24,24 @@ forecast <- function(object, ...){
 #' @param new_data A `tsibble` containing future information used to forecast.
 #' @param h The forecast horison (can be used instead of `new_data` for regular
 #' time series with no exogenous regressors).
-#' @param bias_adjust Use adjusted back-transformed mean for transformations. 
-#' Refer to `vignette("transformations", package = "fable")` for more details.
+#' @param point_forecast The point forecast measure(s) which should be returned 
+#' in the resulting fable. Specified as a named list of functions which accept
+#' a distribution and return a vector. To compute forecast medians, you can use
+#' `list(.median = median)`.
+#' @param bias_adjust Deprecated. Please use `point_forecast` to specify the 
+#' desired point forecast method.
 #' @param ... Additional arguments for forecast model methods.
 #' 
+#' @return
+#' A fable containing the following columns:
+#' - `.model`: The name of the model used to obtain the forecast. Taken from
+#'   the column names of models in the provided mable.
+#' - The point forecast, which by default is the mean. The name of this column
+#'   will be the same as the dependent variable in the model(s).
+#' - `.distribution`. A column of objects of class `fcdist`, representing the
+#'   statistical distribution of the forecast in the given time period.
+#' - All columns in `new_data`, excluding those whose names conflict with the
+#'   above.
 #' @examples 
 #' if (requireNamespace("fable", quietly = TRUE)) {
 #' library(fable)
@@ -78,9 +92,10 @@ forecast <- function(object, ...){
 #' 
 #' @rdname forecast
 #' @export
-forecast.mdl_df <- function(object, new_data = NULL, h = NULL, bias_adjust = TRUE, ...){
+forecast.mdl_df <- function(object, new_data = NULL, h = NULL, 
+                            point_forecast = list(.mean = mean), ...){
   kv <- c(key_vars(object), ".model")
-  mdls <- object%@%"models"
+  mdls <- mable_vars(object)
   if(!is.null(h) && !is.null(new_data)){
     warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
     h <- NULL
@@ -92,18 +107,17 @@ forecast.mdl_df <- function(object, new_data = NULL, h = NULL, bias_adjust = TRU
   # Evaluate forecasts
   object <- dplyr::mutate_at(as_tibble(object), vars(!!!mdls),
                              forecast, object[["new_data"]],
-                             h = h, bias_adjust = bias_adjust, ...,
+                             h = h, point_forecast = point_forecast, ...,
                              key_data = key_data(object))
   
-  object <- gather(object, ".model", ".fc", !!!mdls)
+  object <- tidyr::pivot_longer(object, !!mdls, names_to = ".model", values_to = ".fc") 
   
   # Combine and re-construct fable
   fbl_attr <- attributes(object$.fc[[1]])
   out <- suppressWarnings(
     unnest_tsbl(as_tibble(object)[c(kv, ".fc")], ".fc", parent_key = kv)
   )
-  out[[expr_text(fbl_attr$dist)]] <- invoke(c, map(object$.fc, function(x) x[[expr_text(x%@%"dist")]]))
-  as_fable(out, resp = fbl_attr$response, dist = !!fbl_attr$dist)
+  build_fable(out, response = fbl_attr$response, distribution = fbl_attr$dist)
 }
 
 #' @export
@@ -113,17 +127,33 @@ forecast.lst_mdl <- function(object, new_data = NULL, key_data, ...){
        forecast, ...)
 }
 
+#' @rdname forecast
 #' @export
-forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = TRUE, ...){
+forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = NULL,
+                            point_forecast = list(.mean = mean), ...){
   if(!is.null(h) && !is.null(new_data)){
     warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
     h <- NULL
   }
+  if(!is.null(bias_adjust)){
+    warn("The `bias_adjust` argument for forecast() has been deprecated. Please specify the desired point forecasts using `point_forecast`.\nBias adjusted forecasts are forecast means (`point_forecast = 'mean'`), non-adjusted forecasts are medians (`point_forecast = 'median'`)")
+    point_forecast <- if(bias_adjust) list(.mean = mean) else list(.median = stats::median)
+  }
   if(is.null(new_data)){
     new_data <- make_future_data(object$data, h)
   }
+  
+  # Useful variables
+  idx <- index_var(new_data)
+  mv <- measured_vars(new_data)
+  resp_vars <- map_chr(object$response, expr_name)
+  dist_col <- if(length(resp_vars) > 1) ".distribution" else resp_vars
+  
+  # If there's nothing to forecast, return an empty fable.
   if(NROW(new_data) == 0){
-    abort("There are no forecasts to be made. Check that your forecast horizon includes at least one future value.")
+    new_data[[dist_col]] <- distributional::new_dist(dimnames = resp_vars)
+    fbl <- build_fable(new_data, response = resp_vars, distribution =  !!sym(dist_col))
+    return(fbl)
   }
   
   # Compute specials with new_data
@@ -143,8 +173,9 @@ Does your model require extra variables to produce forecasts?", e$message))
 
   # Compute forecasts
   fc <- forecast(object$fit, new_data, specials = specials, ...)
+  dimnames(fc) <- vapply(object$response, expr_name, character(1L), USE.NAMES = FALSE)
   
-  # Modify forecasts with transformations / bias_adjust
+  # Back-transform forecast distributions
   bt <- map(object$transformation, function(x){
     bt <- invert_transformation(x)
     env <- new_environment(new_data, get_env(bt))
@@ -160,19 +191,23 @@ These required variables can be provided by specifying `new_data`.",
     set_env(bt, env)
   })
   
-  fc[["dist"]] <- update_fcdist(fc[["dist"]], transformation = bt)
-  if(isTRUE(bias_adjust)){
-    # Bias adjust transformation with sd
-    bt <- map2(bt, fc[["sd"]], fabletools::bias_adjust)
+  is_transformed <- vapply(bt, function(x) !is_symbol(body(x)), logical(1L))
+  if(length(bt) > 1) {
+    if(any(is_transformed)){
+      abort("Transformations of multivariate forecasts are not yet supported")
+    }
+  } else {
+    if(is_transformed){
+      bt <- bt[[1]]
+      fc <- distributional::dist_transformed(fc, bt, bt%@%"inverse")
+    }
   }
-  fc[["point"]] <- map2(fc[["point"]], bt, function(fc, bt) as.numeric(bt(fc)))
-  names(fc[["point"]]) <- map_chr(object$response, expr_text)
   
-  idx <- index_var(new_data)
-  mv <- measured_vars(new_data)
-  cn <- c(names(fc[["point"]]), ".distribution")
-  new_data[names(fc[["point"]])] <- fc[["point"]]
-  new_data[[".distribution"]] <- fc[["dist"]]
+  new_data[[dist_col]] <- fc
+  point_fc <- compute_point_forecasts(fc, point_forecast)
+  new_data[names(point_fc)] <- point_fc
+  
+  cn <- c(dist_col, names(point_fc))
   
   fbl <- build_tsibble_meta(
     as_tibble(new_data)[unique(c(idx, cn, mv))],
@@ -181,10 +216,7 @@ These required variables can be provided by specifying `new_data`.",
     interval = interval(new_data)
   )
   
-  as_fable(fbl,
-           resp = object$response,
-           dist = !!sym(".distribution")
-  )
+  build_fable(fbl, response = resp_vars, distribution =  !!sym(dist_col))
 }
 
 #' Construct a new set of forecasts
@@ -201,11 +233,26 @@ These required variables can be provided by specifying `new_data`.",
 #' @export
 construct_fc <- function(point, sd, dist){
   stopifnot(inherits(dist, "fcdist"))
-  if(is.numeric(point)){
-    point <- list(point)
-    sd <- list(sd)
+  
+  dist_env <- dist[[1]]$.env
+  if(identical(dist_env, env_dist_normal)){
+    distributional::dist_normal(map_dbl(dist, `[[`, "mean"), map_dbl(dist, `[[`, "sd"))
+  } else if(identical(dist_env, env_dist_sim)){
+    distributional::dist_sample(flatten(map(dist, `[[`, 1)))
+  } else if(identical(dist_env, env_dist_unknown)){
+    distributional::dist_degenerate(point)
+  } else if(identical(dist_env, env_dist_mv_normal)){
+    distributional::dist_multivariate_normal(map(dist, `[[`, "mean"), map(dist, `[[`, "sd"))
+  } else {
+    abort("Unknown forecast distribution type to convert.")
   }
-  list(point = point, sd = sd, dist = dist)
+}
+
+compute_point_forecasts <- function(distribution, measures){
+  measures <- map(measures, calc, distribution)
+  resp <- dimnames(distribution)
+  if(length(resp) > 1) measures <- map(measures, set_names, resp)
+  flatten_with_names(measures)
 }
 
 #' @export

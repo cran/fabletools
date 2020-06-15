@@ -9,13 +9,12 @@
 #' @inheritParams tibble::tibble
 #' 
 #' @param key Structural variable(s) that identify each model.
-#' @param models Identifiers for the columns containing model(s).
+#' @param model Identifiers for the columns containing model(s).
 #'
 #' @export
-mable <- function(..., key = NULL, models = NULL){
-  as_mable(tibble(...), key = key, models = models)
+mable <- function(..., key = NULL, model = NULL){
+  as_mable(tibble(...), key = !!enquo(key), model = !!enquo(model))
 }
-
 
 #' Is the object a mable
 #' 
@@ -39,38 +38,44 @@ as_mable <- function(x, ...){
 
 #' @rdname as_mable
 #' 
-#' @param key Structural variable(s) that identify each model.
-#' @param models Identifiers for the columns containing model(s).
+#' @inheritParams mable
 #' 
 #' @export
-as_mable.tbl_df <- function(x, key = NULL, models = NULL, ...){
-  models <- tidyselect::vars_select(names(x), !!enquo(models))
+as_mable.data.frame <- function(x, key = NULL, model = NULL, ...){
+  build_mable(x, key = !!enquo(key), model = !!enquo(model))
+}
+
+build_mable <- function (x, key = NULL, key_data = NULL, model) {
+  model <- names(tidyselect::eval_select(enquo(model), data = x))
   
-  if(length(unique(map(x[models], function(mdl) mdl[[1]]$response))) > 1){
+  if(length(unique(map(x[model], function(mdl) mdl[[1]]$response))) > 1){
     abort("A mable can only contain models with the same response variable(s).")
   }
   
-  if (is.data.frame(key)) {
-    key_data <- key
+  if (!is_null(key_data)){
+    assert_key_data(key_data)
+    key <- utils::head(names(key_data), -1L)
   }
-  else{
+  else {
+    key <- names(tidyselect::eval_select(enquo(key), data = x))
     key_data <- group_data(group_by(x, !!!syms(key)))
-    if(any(map_int(key_data[[length(key_data)]], length) > 1)){
-      abort("The result is not a valid mable. The key variables must uniquely identify each row.")
-    }
   }
   
-  if(is_empty(models)){
-    abort("A mable must contain at least one model.")
+  if(any(map_int(key_data[[length(key_data)]], length) > 1)){
+    abort("The result is not a valid mable. The key variables must uniquely identify each row.")
   }
   
-  tibble::new_tibble(x, key = key_data, models = models,
-                     nrow = NROW(x), class = "mdl_df", subclass = "mdl_df")
+  build_mable_meta(x, key_data, model)
+}
+
+build_mable_meta <- function(x, key_data, model){
+  tibble::new_tibble(x, key = key_data, model = model,
+                     nrow = NROW(x), class = "mdl_df", subclass = "mdl_df") 
 }
 
 #' @export
 as_tibble.mdl_df <- function(x, ...){
-  attr(x, "key") <- attr(x, "models") <- NULL
+  attr(x, "key") <- attr(x, "model") <- NULL
   class(x) <- c("tbl_df", "tbl", "data.frame")
   as_tibble(x, ...)
 }
@@ -87,6 +92,24 @@ tbl_sum.mdl_df <- function(x){
   out
 }
 
+restore_mable <- function(data, template){
+  data <- as_tibble(data)
+  data_cols <- names(data)
+  
+  # key_vars <- setdiff(key_vars(template), data_cols)
+  # key_data <- select(key_data(template), key_vars)
+  # if (vec_size(key_data) == 1) {
+  #   template <- remove_key(template, setdiff(key_vars(template), key_vars))
+  # }
+  
+  model_vars <- intersect(mable_vars(template), data_cols)
+  # Variables to keep
+  mbl_vars <- setdiff(key_vars(template), data_cols)
+  res <- bind_cols(template[mbl_vars], data)
+  
+  build_mable(res, key = !!key_vars(template), model = !!model_vars)
+}
+
 #' @export
 gather.mdl_df <- function(data, key = "key", value = "value", ..., na.rm = FALSE,
                           convert = FALSE, factor_key = FALSE){
@@ -94,60 +117,59 @@ gather.mdl_df <- function(data, key = "key", value = "value", ..., na.rm = FALSE
   tbl <- gather(as_tibble(data), key = !!key, value = !!value, 
                 ..., na.rm = na.rm, convert = convert, factor_key = factor_key)
   mdls <- names(which(map_lgl(tbl, inherits, "lst_mdl")))
-  as_mable(tbl, key = c(key_vars(data), key), models = mdls)
+  kv <- c(key_vars(data), key)
+  build_mable(tbl, key = !!kv, model = !!mdls)
 }
 
-# Adapted from tsibble:::select_tsibble
 #' @export
 select.mdl_df <- function (.data, ...){
-  sel_data <- select(as_tibble(.data), ...)
-  sel_vars <- names(sel_data)
-  
-  kv <- key_vars(.data)
-  key_vars <- intersect(sel_vars, kv)
-  key_nochange <- all(is.element(kv, key_vars))
-  
-  mdls <- names(which(map_lgl(sel_data, inherits, "lst_mdl")))
-  if(is_empty(mdls)){
-    abort("A mable must contain at least one model. To remove all models, first convert to a tibble with `as_tibble()`.")
-  }
-  as_mable(sel_data,
-           key = if(key_nochange) key_data(.data) else key_vars,
-           models = mdls)
+  res <- select(as_tibble(.data), ...)
+  restore_mable(res, .data)
+}
+#' @export
+transmute.mdl_df <- function (.data, ...){
+  nm <- names(enquos(..., .named = TRUE))
+  res <- mutate(.data, ...)
+  select(res, !!nm)
 }
 
 #' @export
 `$<-.mdl_df` <- function (x, name, value) {
   tbl <- NextMethod()
   mdls <- names(which(map_lgl(tbl, inherits, "lst_mdl")))
-  as_mable(tbl, key = key_vars(x), models = mdls)
+  as_mable(tbl, key = key_vars(x), model = mdls)
 }
 
 #' @export
-rename.mdl_df <- function (.data, ...){
-  kv <- key_data(.data)
-  .data <- NextMethod()
-  mdls <- names(which(map_lgl(.data, inherits, "lst_mdl")))
-  as_mable(.data, key = kv, models = mdls)
+`names<-.mdl_df` <- function(x, value) {
+  nm <- colnames(x)
+  key_pos <- match(key_vars(x), nm)
+  kd <- key_data(x)
+  colnames(kd) <- c(value[key_pos], ".rows")
+  mdl_pos <- match(mable_vars(x), nm)
+  res <- NextMethod()
+  build_mable_meta(res, key_data = kd, model = value[mdl_pos])
 }
 
 #' @export
-mutate.mdl_df <- function (.data, ...){
-  key <- key(.data)
-  .data <- mutate(as_tibble(.data), ...)
+`[.mdl_df` <- function (x, i, j, drop = FALSE){
+  out <- as_tibble(NextMethod())
+  cn <- colnames(out)
+  kv <- intersect(key_vars(x), cn)
+  mv <- intersect(mable_vars(x), cn)
   
-  mdls <- names(which(map_lgl(.data, inherits, "lst_mdl")))
-  if(is_empty(mdls)){
-    abort("A mable must contain at least one model. To remove all models, first convert to a tibble with `as_tibble()`.")
+  # If keys have been dropped, return a tibble
+  if(n_keys(x) != length(kv)){
+    return(out)
   }
-  as_mable(.data, key = key, models = mdls)
+  
+  build_mable(out, key = !!kv, model = !!mv)
 }
 
-filter.mdl_df <- function (.data, ...){
-  key <- key(.data)
-  mdls <- .data%@%"models"
-  .data <- filter(as_tibble(.data), ...)
-  as_mable(.data, key = key, models = mdls)
+#' @export
+group_data.mdl_df <- function(.data){
+  .data <- as_tibble(.data)
+  NextMethod()
 }
 
 #' @export

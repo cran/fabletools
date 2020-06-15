@@ -22,7 +22,7 @@ features_if(.tbl, .predicate, features, ...)
 
 \item{features}{A list of functions (or lambda expressions) for the features to compute. \code{\link[=feature_set]{feature_set()}} is a useful helper for building sets of features.}
 
-\item{...}{Additional arguments to be passed to each feature. These arguments will only be passed to features which use it in their formal arguments (\code{\link[base:formals]{base::formals()}}), and not via their \code{...}. While passing \code{na.rm = TRUE} to \code{\link[stats:var]{stats::var()}} will work, it will not for \code{\link[base:mean]{base::mean()}} as its formals are \code{x} and \code{...}. To more precisely pass inputs to each function, you can use lambdas in the list of features (\code{~ mean(., na.rm = TRUE)}).}
+\item{...}{Additional arguments to be passed to each feature. These arguments will only be passed to features which use it in their formal arguments (\code{\link[base:formals]{base::formals()}}), and not via their \code{...}. While passing \code{na.rm = TRUE} to \code{\link[stats:cor]{stats::var()}} will work, it will not for \code{\link[base:mean]{base::mean()}} as its formals are \code{x} and \code{...}. To more precisely pass inputs to each function, you can use lambdas in the list of features (\code{~ mean(., na.rm = TRUE)}).}
 
 \item{.predicate}{A predicate function (or lambda expression) to be applied to the columns or a logical vector. The variables for which .predicate is or returns TRUE are selected.}
 }
@@ -35,4 +35,19 @@ Lists of available features can be found in the following pages:
 \item \link[=features_by_pkg]{Features by package}
 \item \link[=features_by_tag]{Features by tag}
 }
+}
+\examples{
+# Provide a set of functions as a named list to features.
+library(tsibble)
+tourism \%>\% 
+  features(Trips, features = list(mean = mean, sd = sd))
+
+# Search and use useful features with `feature_set()`. 
+if(requireNamespace("feasts")) library(feasts)
+tourism \%>\% 
+  features(Trips, features = feature_set(tags = "autocorrelation"))
+
+}
+\seealso{
+\code{\link[=feature_set]{feature_set()}}
 }

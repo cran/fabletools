@@ -6,7 +6,7 @@ train_combination <- function(.data, specials, ..., cmbn_fn, cmbn_args){
   mdls[mdl_def] <- mdls[mdl_def] %>% 
     map(function(x) estimate(self$data, x))
   
-  do.call(cmbn_fn, c(mdls, cmbn_args))
+  do.call(cmbn_fn, c(mdls, cmbn_args))[["fit"]]
 }
 
 #' Combination modelling
@@ -128,7 +128,7 @@ new_model_combination <- function(x, combination){
   new_model(
     structure(x, combination = combination, class = c("model_combination")),
     model = x[[which(mdls)[1]]][["model"]],
-    data = transmute(x[[which(mdls)[1]]][["data"]], !!expr_text(comb_response[[1]]) := resp),
+    data = transmute(x[[which(mdls)[1]]][["data"]], !!expr_name(comb_response[[1]]) := resp),
     response = comb_response,
     transformation = list(new_transformation(identity, identity))
   )
@@ -182,29 +182,30 @@ Ops.mdl_ts <- function(e1, e2){
     .Generic <- "*"
     e2 <- 1/e2
   }
-  e_len <- c(length(e1), length(e2))
-  if(max(e_len) %% min(e_len) != 0){
-    warn("longer object length is not a multiple of shorter object length")
-  }
   
-  if(e_len[[1]] != e_len[[2]]){
-    if(which.min(e_len) == 1){
-      is_mdl <- is_model(e1)
-      cls <- class(e1)
-      e1 <- rep_len(e1, e_len[[2]])
-      if(is_mdl){
-        e1 <- structure(e1, class = cls)
-      }
-    }
-    else{
-      is_mdl <- is_model(e2)
-      cls <- class(e2)
-      e2 <- rep_len(e2, e_len[[1]])
-      if(is_mdl){
-        e2 <- structure(e2, class = cls)
-      }
-    }
-  }
+  # e_len <- c(length(e1), length(e2))
+  # if(max(e_len) %% min(e_len) != 0){
+  #   warn("longer object length is not a multiple of shorter object length")
+  # }
+  # 
+  # if(e_len[[1]] != e_len[[2]]){
+  #   if(which.min(e_len) == 1){
+  #     is_mdl <- is_model(e1)
+  #     cls <- class(e1)
+  #     e1 <- rep_len(e1, e_len[[2]])
+  #     if(is_mdl){
+  #       e1 <- structure(e1, class = cls)
+  #     }
+  #   }
+  #   else{
+  #     is_mdl <- is_model(e2)
+  #     cls <- class(e2)
+  #     e2 <- rep_len(e2, e_len[[1]])
+  #     if(is_mdl){
+  #       e2 <- structure(e2, class = cls)
+  #     }
+  #   }
+  # }
   
   if(is_model(e1) && is_model(e2)){
     if(.Generic == "*"){
@@ -245,41 +246,27 @@ forecast.model_combination <- function(object, new_data, specials, ...){
     fc_cov <- 0
   }
   object[mdls] <- map(object[mdls], forecast, new_data = new_data, ...)
+  object[mdls] <- map(object[mdls], function(x) x[[distribution_var(x)]])
   
   if(all(mdls)){
     fc_sd <- object %>% 
-      map(`[[`, expr_text(attr(object[[1]],"dist"))) %>% 
-      map(function(x){
-        if(is_dist_normal(x)){
-          map_dbl(x, `[[`, "sd")
-        }
-        else{
-          rep(0, length(x))
-        }
-      }) %>% 
+      map(function(x) sqrt(distributional::variance(x))) %>% 
       transpose_dbl()
     fc_cov <- suppressWarnings(stats::cov2cor(fc_cov))
     fc_cov[!is.finite(fc_cov)] <- 0 # In case of perfect forecasts
     fc_cov <- map_dbl(fc_sd, function(sigma) (diag(sigma)%*%fc_cov%*%t(diag(sigma)))[1,2])
   }
   
-  get_attr_col <- function(x, col) if(is_fable(x)) x[[expr_text(attr(x, col))]] else x 
-  # var(x) + var(y) + 2*cov(x,y)
-  .dist <- eval_tidy(expr, map(object, get_attr_col, "dist"))
-  if(is_dist_normal(.dist)){
-    .dist <- add_class(
-      map2(.dist, fc_cov, function(x, cov) {x$sd <- sqrt(x$sd^2 + 2*cov); x}),
-      c("fcdist", "list"))
+  is_normal <- map_lgl(object[mdls], function(x) inherits(x[[1]], "dist_normal"))
+  if(all(is_normal)){ # Improve check to ensure all distributions are normal
+    .dist <- eval_tidy(expr, object)
+    # var(x) + var(y) + 2*cov(x,y)
+    .dist <- distributional::dist_normal(mean(.dist), sqrt(distributional::variance(.dist) + 2*fc_cov))
+  } else {
+    .dist <- distributional::dist_degenerate(eval_tidy(expr, map(object, mean)))
   }
   
-  .fc <- eval_tidy(expr, map(object, function(x) 
-    if(is_fable(x)) x[[expr_text(attr(x, "response")[[1]])]] else x))
-  
-  construct_fc(
-    point = .fc,
-    sd = rep(0, NROW(object[[which(mdls)[[1]]]])),
-    dist = .dist
-  )
+  .dist
 }
 
 #' @export

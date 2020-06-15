@@ -4,21 +4,23 @@
 \alias{mable}
 \title{Create a new mable}
 \usage{
-mable(..., key = NULL, models = NULL)
+mable(..., key = NULL, model = NULL)
 }
 \arguments{
 \item{...}{<\code{\link[rlang:dyn-dots]{dynamic-dots}}>
 A set of name-value pairs. These arguments are
-processed with \code{\link[rlang:quos]{rlang::quos()}} and support unquote via \code{\link{!!}} and
+processed with \code{\link[rlang:nse-defuse]{rlang::quos()}} and support unquote via \code{\link{!!}} and
 unquote-splice via \code{\link{!!!}}. Use \verb{:=} to create columns that start with a dot.
 
-Arguments are evaluated sequentially, however the \link{.data} pronoun is not
-available to prevent masking usage in a higher level function, like
-\code{\link[dplyr:mutate]{dplyr::mutate()}}.}
+Arguments are evaluated sequentially.
+You can refer to previously created elements directly or using the \link{.data}
+pronoun.
+An existing \code{.data} pronoun, provided e.g. inside \code{\link[dplyr:mutate]{dplyr::mutate()}},
+is not available.}
 
 \item{key}{Structural variable(s) that identify each model.}
 
-\item{models}{Identifiers for the columns containing model(s).}
+\item{model}{Identifiers for the columns containing model(s).}
 }
 \description{
 A mable (model table) data class (\code{mdl_df}) is a tibble-like data structure

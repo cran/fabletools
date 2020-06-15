@@ -29,7 +29,7 @@ aggregate_key <- function(.data, .spec, ...){
 }
 
 #' @export
-aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){
+aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){#, dev = FALSE){
   .spec <- enexpr(.spec)
   if(is.null(.spec)){
     message(
@@ -44,34 +44,51 @@ aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){
   key_comb <- attr(tm, "factors")
   key_vars <- rownames(key_comb)
   key_comb <- map(split(key_comb, col(key_comb)), function(x) key_vars[x!=0])
-  
   if(attr(tm, "intercept")){
     key_comb <- c(list(chr()), key_comb)
   }
   
-  idx <- index2(.data)
+  idx <- index2_var(.data)
   intvl <- interval(.data)
+  kd <- key_data(.data)
+  cn <- colnames(.data)
+  has_varied_index <- any(has_gaps(.data, .full = TRUE)[[".gaps"]]) && !is_ordered(.data)
   .data <- as_tibble(.data)
   
-  agg_dt <- bind_row_attrb(map(key_comb, function(x){
-    group_data(group_by(.data, !!idx, !!!syms(x)))
-  }))
-  
-  kv <- setdiff(colnames(agg_dt), c(as_string(idx), ".rows"))
-  agg_dt <- agg_dt[c(kv, as_string(idx), ".rows")]
-  
+  kv <- unique(unlist(key_comb, recursive = FALSE))
+  # if(dev){
+  #   .data <- map(unname(key_comb), function(x){
+  #     agg <- summarise_alt(.data, ..., 
+  #                          .grps = group_by_alt(.data, !!sym(idx), !!!syms(x)))
+  #     agg[x] <- map(agg[x], agg_vec)
+  #     agg_keys <- setdiff(kv, x)
+  #     agg[agg_keys] <- rep(list(agg_vec(NA_character_, aggregated = TRUE)), length(agg_keys))
+  #     agg
+  #   })
+  #   .data <- vctrs::vec_rbind(!!!.data)
+  # } else {
+  agg_dt <- map(unname(key_comb), function(x){
+    gd <- group_data(group_by(.data, !!sym(idx), !!!set_names(map(x, function(.) expr(agg_vec(!!sym(.)))), x)))
+    agg_keys <- setdiff(kv, x)
+    agg_cols <- rep(list(agg_vec(NA, aggregated = TRUE)), length(agg_keys))
+    gd[agg_keys] <- agg_cols
+    gd[c(idx, kv, ".rows")]
+  })
+  agg_dt <- vctrs::vec_rbind(!!!agg_dt)
   .data <- dplyr::new_grouped_df(.data, groups = agg_dt)
-  
-  # Compute aggregates
   .data <- summarise(.data, ...)
+  # }
+  
+  # Re-order columns into index, keys, values order
+  .data <- .data[c(idx, kv, setdiff(colnames(.data), c(idx,kv)))]
+  
   key_dt <- group_data(group_by(.data, !!!syms(kv)))
   .data <- ungroup(.data)
   
   # Return tsibble
-  build_tsibble_meta(.data, key_data = key_dt, index = as_string(idx), 
+  build_tsibble_meta(.data, key_data = key_dt, index = idx, 
                      index2 = as_string(idx), ordered = TRUE,
-                     interval = intvl) %>% 
-    mutate(!!!set_names(map(kv, function(x) expr(agg_key(!!sym(x)))), kv))
+                     interval = intvl)
 }
 
 
@@ -137,37 +154,26 @@ aggregate_index.tbl_ts <- function(.data, .times = NULL, ...){
   
   # Return tsibble
   as_tsibble(.data, key = kv, index = !!idx) %>% 
-    mutate(!!!set_names(map(kv, function(x) expr(agg_key(!!sym(x)))), kv))
+    mutate(!!!set_names(map(kv, function(x) expr(agg_vec(!!sym(x)))), kv))
 }
 
-agg_key <- function(x){
-  add_class(x, "agg_key")
-}
-
-#' @export
-print.agg_key <- function(x, ...){
-  print(trimws(format(x, ...)))
+agg_vec <- function(x = character(), aggregated = logical(vec_size(x))){
+  vec_assert(aggregated, ptype = logical())
+  vctrs::new_rcrd(list(x = x, agg = aggregated), class = "agg_vec")
 }
 
 #' @export
-format.agg_key <- function(x, ..., na_chr = "<aggregated>"){
-  na_pos <- is.na(x)
-  out <- NextMethod(na.encode = FALSE)
-  out[na_pos] <- na_chr
+format.agg_vec <- function(x, ..., na_chr = "<aggregated>"){
+  n <- vec_size(x)
+  x <- vec_data(x)
+  is_agg <- x[["agg"]]
+  out <- character(length = n)
+  out[is_agg] <- na_chr
+  out[!is_agg] <- format(x[["x"]][!is_agg], ...)
   out 
 }
 
-#' @export
-`[.agg_key` <- function(...){
-  agg_key(NextMethod())
-}
-
-#' @export
-unique.agg_key <- function(x, incomparables = FALSE, ...){
-  agg_key(NextMethod())
-}
-
-pillar_shaft.agg_key <- function(x, ...) {
+pillar_shaft.agg_vec <- function(x, ...) {
   if(requireNamespace("crayon")){
     na_chr <- crayon::style("<aggregated>", crayon::make_style("#999999", grey = TRUE))
   }
@@ -180,12 +186,71 @@ pillar_shaft.agg_key <- function(x, ...) {
   pillar::new_pillar_shaft_simple(out, align = "left", min_width = 10)
 }
 
-type_sum.agg_key <- function(x){
-  pillar::type_sum(rm_class(x, "agg_key"))
+#' Internal vctrs methods
+#'
+#' These methods are the extensions that allow aggregation vectors to work with
+#' vctrs.
+#'
+#' @keywords internal
+#' @name aggregation-vctrs
+NULL
+
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype2.agg_vec <- function(x, y, ...) UseMethod("vec_ptype2.agg_vec", y)
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype2.agg_vec.agg_vec <- function(x, y, ...) {
+  x <- vec_data(x)[["x"]]
+  y <- vec_data(y)[["x"]]
+  ptype <- if(!is_logical(x) && !is_logical(y)) {
+    vec_ptype2(x, y)
+  } else if (is_logical(x)) {
+    y
+  } else {
+    x
+  }
+  agg_vec(ptype)
+}
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype2.agg_vec.default <- function(x, y, ...) agg_vec()
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype2.agg_vec.character <- function(x, y, ...) agg_vec()
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype2.character.agg_vec <- function(x, y, ...) agg_vec()
+
+#' @rdname aggregation-vctrs
+#' @export
+vec_ptype_abbr.agg_vec <- function(x, ...) {
+  vctrs::vec_ptype_abbr(vec_data(x)[["x"]], ...)
 }
 
-obj_sum.agg_key <- function(x){
-  pillar::obj_sum(rm_class(x, "agg_key"))
+#' @rdname aggregation-vctrs
+#' @export
+vec_cast.agg_vec <- function(x, to, ...) UseMethod("vec_cast.agg_vec")
+#' @rdname aggregation-vctrs
+#' @export
+vec_cast.agg_vec.agg_vec <- function(x, to, ...) {
+  x <- vec_proxy(x)
+  if(all(x$agg)) x$x <- rep_len(vec_cast(NA, vec_proxy(to)$x), length(x$x))
+  vec_restore(x, to)
+}
+#' @rdname aggregation-vctrs
+#' @export
+vec_cast.agg_vec.default <- function(x, to, ...) agg_vec(x)
+#' @export
+vec_cast.agg_vec.character <- function(x, to, ...) agg_vec(x)
+#' @rdname aggregation-vctrs
+#' @export
+vec_cast.character.agg_vec <- function(x, to, ...) trimws(format(x))
+
+#' @rdname aggregation-vctrs
+#' @export
+vec_proxy_compare.agg_vec <- function(x, ...) {
+  vec_proxy(x)[c(2,1)]
 }
 
 #' Is the element an aggregation of smaller data
@@ -196,10 +261,73 @@ obj_sum.agg_key <- function(x){
 #' 
 #' @export
 is_aggregated <- function(x){
-  if(inherits(x, "agg_key")){
-    is.na(x)
-  }
-  else{
-    rep(FALSE, length(x))
+  if(!inherits(x, "agg_vec")){
+    logical(vec_size(x))
+  } else {
+    vec_proxy(x)[["agg"]]
   }
 }
+
+scale_type.agg_vec <- function(x) {
+  abort("Cannot add an aggregated vector to a plot, use format() to plot with your aggregations.")
+}
+# # Space efficient group identifiers, storing group positions as vectors instead of lists
+# group_by_alt <- function(.data, ...){
+#   .data <- transmute(as_tibble(.data), ...)
+#   grps <- vctrs::vec_group_id(.data)
+#   list(pos = order(grps, method = "radix"), len = tabulate(grps), var = names(.data))
+# }
+# 
+# # Simplified summarise(), which uses the group identifiers from group_by_alt()
+# summarise_alt <- function(.data, ..., .grps = group_by_alt(.data)){
+#   .data <- as.data.frame(.data)
+#   dots <- enquos(..., .named = TRUE)
+#   dots_names <- names(dots)
+#   
+#   grp_pos <- .grps[["pos"]]
+#   grp_len <- .grps[["len"]]
+#   
+#   n_grps <- length(grp_len)
+#   grp_start <- 1 + cumsum(c(0, grp_len[-n_grps]))
+#   out <- vec_slice(.data[.grps[["var"]]], grp_pos[grp_start])
+#   
+#   # Promise based group aware data mask (adapted from dplyr:::DataMask)
+#   bindings <- env(empty_env())
+#   resolved <- rep_len(TRUE, ncol(.data))
+#   promise_fn <- function(index) {
+#     resolved[[index]] <<- TRUE
+#     vec_slice(.subset2(.data, index), rows)
+#   }
+#   promise_env <- get_env(promise_fn)
+#   nm <- names2(.data)
+#   promises <- map(seq_len(ncol(.data)), function(.x) expr(delayedAssign(!!nm[[.x]], promise_fn(!!.x), env, bindings)))
+#   env <- current_env()
+#   # env_bind_lazy(bindings, !!!promises)
+#   mask <- new_data_mask(bindings)
+#   mask$.data <- as_data_pronoun(mask)
+#   
+#   # Compute dots over groups
+#   for(i in seq_along(dots)){
+#     res <- NULL
+#     dot <- dots[[i]]
+#     for(grp in seq_len(n_grps)){
+#       # Set groups and reset resolved promises
+#       size <- grp_len[grp]
+#       idx <- grp_start[grp]
+#       promise_env$rows <- .subset(grp_pos, idx:(idx+size-1))
+#       for(j in which(resolved)){
+#         eval(promises[[j]])
+#         resolved[j] <- FALSE
+#       }
+#       
+#       # Compute and store calculation
+#       val <- eval_tidy(dot, mask)
+#       if(is.null(res)){
+#         res <- vec_init(val, n = n_grps)
+#       }
+#       res[grp] <- val
+#     }
+#     out[names(dots)[[i]]] <- res
+#   }
+#   out
+# }

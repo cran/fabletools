@@ -9,7 +9,8 @@
 #' in the mable identifies a single model.
 #' 
 #' @param .data A data structure suitable for the models (such as a `tsibble`)
-#' @param ... Definitions for the models to be used
+#' @param ... Definitions for the models to be used. All models must share the
+#' same response variable.
 #'
 #' @rdname model
 #' @export
@@ -68,8 +69,9 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
   num_key <- n_keys(.data)
   num_mdl <- length(models)
   num_est <- num_mdl * num_key
+  p <- progressr::progressor(num_est)
   
-  keys <- key(.data)
+  kv <- key_vars(.data)
   .data <- nest_keys(.data, "lst_data")
   
   if(.safely){
@@ -84,13 +86,19 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
     }
   }
   
+  estimate_progress <- function(dt, mdl){
+    out <- estimate(dt, mdl)
+    p()
+    out
+  }
+  
   if(is_attached("package:future")){
     require_package("future.apply")
     eval_models <- function(models, lst_data){
       out <- future.apply::future_mapply(
         rep(lst_data, length(models)),
         rep(models, each = length(lst_data)),
-        FUN = estimate,
+        FUN = estimate_progress,
         SIMPLIFY = FALSE,
         future.globals = FALSE
       )
@@ -98,16 +106,9 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
     }
   }
   else{
-    pb <- if(num_est > 1) dplyr::progress_estimated(num_est, min_time = 5) else NULL
     eval_models <- function(models, lst_data){
       map(models, function(model){
-        map(lst_data, function(dt, mdl){
-          out <- estimate(dt, mdl)
-          if(!is.null(pb)){
-            pb$tick()$print()
-          }
-          out
-        }, model)
+        map(lst_data, estimate_progress, model)
       })
     }
   }
@@ -134,60 +135,14 @@ Check that specified model(s) are model definitions.", nm[which(!is_mdl)[1]]))
     })
   }
   
-  fits <- map(fits, structure, class = c("lst_mdl", "list"))
+  fits <- map(fits, list_of_models)
   
   .data %>% 
     transmute(
-      !!!keys,
+      !!!syms(kv),
       !!!fits
     ) %>% 
-    as_mable(keys, names(fits))
-}
-
-new_model <- function(fit, model, data, response, transformation){
-  if(is_model(fit)) return(fit)
-  structure(list(fit = fit, model = model, data = data,
-                 response = response, transformation = transformation),
-            class = "mdl_ts")
-}
-
-#' Is the object a model
-#' 
-#' @param x An object.
-#' 
-#' @export
-is_model <- function(x){
-  inherits(x, "mdl_ts")
-}
-
-type_sum.mdl_ts <-  function(x){
-  model_sum(x[["fit"]])
-}
-
-#' Provide a succinct summary of a model
-#' 
-#' Similarly to pillar's type_sum and obj_sum, model_sum is used to provide brief model summaries.
-#' 
-#' @param x The model to summarise
-#' 
-#' @export
-model_sum <- function(x){
-  UseMethod("model_sum")
-}
-
-#' @export
-model_sum.default <- function(x){
-  tibble::type_sum(x)
-}
-
-#' @export
-model_sum.mdl_ts <-  function(x){
-  model_sum(x$fit)
-}
-
-#' @export
-print.mdl_ts <-  function(x, ...){
-  report(x)
+    as_mable(key = !!kv, model = names(fits))
 }
 
 #' Extract the left hand side of a model
@@ -222,6 +177,3 @@ model_rhs <- function(model){
     expr(NULL)
   }
 }
-
-#' @export
-length.mdl_ts <-  function(x) 1

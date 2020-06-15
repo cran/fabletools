@@ -48,3 +48,11 @@ generics::generate
 #' @importFrom generics refit
 #' @export
 generics::refit
+
+#' @importFrom distributional hilo
+#' @export
+distributional::hilo
+
+#' @importFrom distributional guide_level
+#' @export
+distributional::guide_level

@@ -10,6 +10,7 @@
 #' @param ... Other arguments passed to methods.
 #' 
 #' @examples 
+#' \dontrun{
 #' if (requireNamespace("fable", quietly = TRUE)) {
 #' library(fable)
 #' library(tsibbledata)
@@ -20,11 +21,12 @@
 #'   components() %>% 
 #'   autoplot()
 #' }
+#' }
 #'
 #' @rdname components
 #' @export
 components.mdl_df <- function(object, ...){
-  object <- gather(object, ".model", ".fit", !!!syms(object%@%"models"))
+  object <- gather(object, ".model", ".fit", !!!syms(mable_vars(object)))
   kv <- key_vars(object)
   object <- transmute(as_tibble(object),
                       !!!syms(kv), !!sym(".model"),
