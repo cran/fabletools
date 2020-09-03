@@ -2,14 +2,13 @@
 #'
 #' A fable (forecast table) data class (`fbl_ts`) which is a tsibble-like data
 #' structure for representing forecasts. In extension to the key and index from 
-#' the tsibble (`tbl_ts`) class, a fable (`fbl_ts`) must contain columns of 
-#' point forecasts for the response variable(s), and a single distribution 
-#' column (`fcdist`).
+#' the tsibble (`tbl_ts`) class, a fable (`fbl_ts`) must also contain a single
+#' distribution column that uses values from the distributional package.
 #'
 #' @param ... Arguments passed to [tsibble::tsibble()].
-#' @param response The response variable(s). A single response can be specified
-#' directly via `response = y`, multiple responses should be use `response = c(y, z)`.
-#' @param distribution The distribution variable (given as a bare or unquoted variable).
+#' @param response The character vector of response variable(s).
+#' @param distribution The name of the distribution column (can be provided
+#' using a bare expression).
 #'
 #' @export
 fable <- function(..., response, distribution){
@@ -80,6 +79,47 @@ as_fable.fbl_ts <- function(x, response, distribution, ...){
 #' @export
 as_fable.grouped_df <- as_fable.tbl_df
 
+#' @inheritParams forecast.mdl_df
+#' @rdname as-fable
+#' @export
+as_fable.forecast <- function(x, ..., point_forecast = list(.mean = mean)){
+  if(is.null(x$upper)){
+    # Without intervals, the best guess is the point forecast
+    dist <- distributional::dist_degenerate(x$mean)
+  } else {
+    if(!is.null(x$lambda)){
+      x$upper <- box_cox(x$upper, x$lambda)
+      x$lower <- box_cox(x$lower, x$lambda)
+    }
+    warn("Assuming intervals are computed from a normal distribution.")
+    level <- colnames(x$upper)[1]
+    level <- as.numeric(gsub("^[^0-9]+|%", "", level))/100
+    mid <- (x$upper[,1] - x$lower[,1])/2
+    mu <- x$lower[,1] + mid
+    sigma <- mid/(stats::qnorm((1+level)/2))
+    dist <- distributional::dist_normal(mu = as.numeric(mu), sigma = as.numeric(sigma))
+    if(!is.null(x$lambda)){
+      dist <- distributional::dist_transformed(
+        dist, 
+        transform = rlang::new_function(exprs(x = ), expr(inv_box_cox(x, !!x$lambda)), env = rlang::pkg_env("fabletools")), 
+        inverse = rlang::new_function(exprs(x = ), expr(inv_box_cox(x, !!x$lambda)), env = rlang::pkg_env("fabletools"))
+      )
+    }
+  }
+  out <- as_tsibble(x$mean)
+  dimnames(dist) <- "value"
+  out[["value"]] <- dist
+  
+  point_fc <- compute_point_forecasts(dist, point_forecast)
+  out[names(point_fc)] <- point_fc
+  
+  build_fable(
+    out,
+    response = "value",
+    distribution = "value"
+  )
+}
+
 build_fable <- function (x, response, distribution) {
   # If the response (from user input) needs converting
   response <- eval_tidy(enquo(response))
@@ -94,6 +134,10 @@ build_fable <- function (x, response, distribution) {
     fbl <- tsibble::new_tsibble(
       x, response = response, dist = distribution, model_cn = ".model",
       class = "fbl_ts")
+  }
+  if(is.null(dimnames(fbl[[distribution]]))) {
+    warn("The dimnames of the fable's distribution are missing and have been set to match the response variables.")
+    dimnames(fbl[[distribution]]) <- response
   }
   validate_fable(fbl)
   fbl
@@ -127,7 +171,7 @@ validate_fable <- function(fbl){
     abort(sprintf("Could not find distribution variable `%s` in the fable. A fable must contain a distribution, if you want to remove it convert to a tsibble with `as_tsibble()`.",
                   chr_dist))
   }
-  vec_is(fbl[[chr_dist]], distributional::new_dist())
+  vec_assert(fbl[[chr_dist]], distributional::new_dist(dimnames = response_vars(fbl)))
 }
 
 tbl_sum.fbl_ts <- function(x){
@@ -203,7 +247,7 @@ ungroup.grouped_fbl <- group_by.fbl_ts
 
 #' @export
 rbind.fbl_ts <- function(...){
-  .Deprecated("bind_rows()")
+  deprecate_warn("0.2.0", "rbind.fbl_ts()", "bind_rows()")
   fbls <- dots_list(...)
   response <- map(fbls, response_vars)
   dist <- map(fbls, distribution_var)

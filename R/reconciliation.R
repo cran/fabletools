@@ -52,19 +52,28 @@ reconcile.mdl_df <- function(.data, ...){
 min_trace <- function(models, method = c("wls_var", "ols", "wls_struct", "mint_cov", "mint_shrink"),
                  sparse = NULL){
   if(is.null(sparse)){
-    sparse <- requireNamespace("SparseM", quietly = TRUE)
+    sparse <- requireNamespace("Matrix", quietly = TRUE)
   }
   structure(models, class = c("lst_mint_mdl", "lst_mdl", "list"),
             method = match.arg(method), sparse = sparse)
 }
 
-#' @importFrom utils combn
 #' @export
 forecast.lst_mint_mdl <- function(object, key_data, 
                                   new_data = NULL, h = NULL,
                                   point_forecast = list(.mean = mean), ...){
   method <- object%@%"method"
   sparse <- object%@%"sparse"
+  if(sparse){
+    require_package("Matrix")
+    as.matrix <- Matrix::as.matrix
+    t <- Matrix::t
+    diag <- function(x) if(is.vector(x)) Matrix::Diagonal(x = x) else Matrix::diag(x)
+    solve <- Matrix::solve
+    cov2cor <- Matrix::cov2cor
+  } else {
+    cov2cor <- stats::cov2cor
+  }
   
   point_method <- point_forecast
   point_forecast <- list()
@@ -73,15 +82,7 @@ forecast.lst_mint_mdl <- function(object, key_data,
   if(length(unique(map(fc, interval))) > 1){
     abort("Reconciliation of temporal hierarchies is not yet supported.")
   }
-  fc_dist <- map(fc, function(x) x[[distribution_var(x)]])
-  is_normal <- all(map_lgl(fc_dist, function(x) inherits(x[[1]], "dist_normal")))
   
-  fc_mean <- as.matrix(invoke(cbind, map(fc_dist, mean)))
-  fc_var <- transpose_dbl(map(fc_dist, distributional::variance))
-  
-  # Construct S matrix - ??GA: have moved this here as I need it for Structural scaling
-  S <- build_smat_rows(key_data)
-
   # Compute weights (sample covariance)
   res <- map(object, function(x, ...) residuals(x, ...), type = "response")
   if(length(unique(map_dbl(res, nrow))) > 1){
@@ -91,29 +92,32 @@ forecast.lst_mint_mdl <- function(object, key_data,
     res <- matrix(invoke(c, map(res, `[[`, 2)), ncol = length(object))
   }
   
+  # Construct S matrix - ??GA: have moved this here as I need it for Structural scaling
+  agg_data <- build_key_data_smat(key_data)
+  
   n <- nrow(res)
   covm <- crossprod(stats::na.omit(res)) / n
   if(method == "ols"){
     # OLS
-    W <- diag(nrow = nrow(covm), ncol = ncol(covm))
+    W <- diag(rep(1L, nrow(covm)))
   } else if(method == "wls_var"){
     # WLS variance scaling
     W <- diag(diag(covm))
   } else if (method == "wls_struct"){
     # WLS structural scaling
-    W <- diag(apply(S,1,sum))
+    W <- diag(vapply(agg_data$agg,length,integer(1L)))
   } else if (method == "mint_cov"){
     # min_trace covariance
     W <- covm
   } else if (method == "mint_shrink"){
     # min_trace shrink
     tar <- diag(apply(res, 2, compose(crossprod, stats::na.omit))/n)
-    corm <- stats::cov2cor(covm)
+    corm <- cov2cor(covm)
     xs <- scale(res, center = FALSE, scale = sqrt(diag(covm)))
     xs <- xs[stats::complete.cases(xs),]
     v <- (1/(n * (n - 1))) * (crossprod(xs^2) - 1/n * (crossprod(xs))^2)
     diag(v) <- 0
-    corapn <- stats::cov2cor(tar)
+    corapn <- cov2cor(tar)
     d <- (corm - corapn)^2
     lambda <- sum(v)/sum(d)
     lambda <- max(min(lambda, 1), 0)
@@ -129,78 +133,169 @@ forecast.lst_mint_mdl <- function(object, key_data,
   }
   
   # Reconciliation matrices
-  R1 <- stats::cov2cor(W)
-  W_h <- map(fc_var, function(var) diag(sqrt(var))%*%R1%*%t(diag(sqrt(var))))
-  
-  if(sparse){
-    require_package("SparseM")
-    require_package("methods")
-    as.matrix <- SparseM::as.matrix
-    t <- SparseM::t
-    diag <- SparseM::diag
-    
-    row_btm <- key_data %>%
-      dplyr::filter(
-        !!!map(colnames(key_data[-length(key_data)]), function(x){
-          expr(!is_aggregated(!!sym(x)))
-        })
-      )
-    row_btm <- vctrs::vec_c(!!!row_btm[[length(row_btm)]])
-    row_agg <- seq_len(NROW(key_data))[-row_btm]
-    
-    i_pos <- which(as.logical(S[row_btm,]))
-    S <- SparseM::as.matrix.csr(S)
-    J <- methods::new("matrix.csr", ra = rep(1,ncol(S)), ja = row_btm,
-                      ia = c((i_pos-1L)%/%ncol(S)+1L, ncol(S) + 1L), dimension = rev(dim(S)))
-    
-    U <- cbind(methods::as(diff(dim(J)), "matrix.diag.csr"), SparseM::as.matrix.csr(-S[row_agg,]))
-    U <- U[, order(c(row_agg, row_btm))]
-    
-    P <- J - J%*%W%*%t(U)%*%SparseM::solve(U%*%W%*%t(U), eps = Inf)%*%U
+  if(sparse){ 
+    row_btm <- agg_data$leaf
+    row_agg <- seq_len(nrow(key_data))[-row_btm]
+    S <- Matrix::sparseMatrix(
+      i = rep(seq_along(agg_data$agg), lengths(agg_data$agg)),
+      j = vec_c(!!!agg_data$agg),
+      x = rep(1, sum(lengths(agg_data$agg))))
+    J <- Matrix::sparseMatrix(i = S[row_btm,]@i+1, j = row_btm, x = 1L, 
+                              dims = rev(dim(S)))
+    U <- cbind(
+      Matrix::Diagonal(diff(dim(J))),
+      -S[row_agg,,drop = FALSE]
+    )
+    U <- U[, order(c(row_agg, row_btm)), drop = FALSE]
+    Ut <- t(U)
+    WUt <- W %*% Ut
+    P <- J - J %*% WUt %*% solve(U %*% WUt, U)
+    # P <- J - J%*%W%*%t(U)%*%solve(U%*%W%*%t(U))%*%U
   }
   else {
+    S <- matrix(0L, nrow = length(agg_data$agg), ncol = max(vec_c(!!!agg_data$agg)))
+    S[length(agg_data$agg)*(vec_c(!!!agg_data$agg)-1) + rep(seq_along(agg_data$agg), lengths(agg_data$agg))] <- 1L
     R <- t(S)%*%solve(W)
     P <- solve(R%*%S)%*%R
   }
   
-  # Apply to forecasts
-  fc_mean <- as.matrix(S%*%P%*%t(fc_mean))
-  fc_mean <- split(fc_mean, row(fc_mean))
-  if(is_normal){
-    fc_var <- map(W_h, function(W) diag(S%*%P%*%W%*%t(P)%*%t(S)))
-    fc_dist <- map2(fc_mean, transpose_dbl(map(fc_var, sqrt)), distributional::dist_normal)
-  } else {
-    fc_dist <- map(fc_mean, distributional::dist_degenerate)
-  }
-  
-  # Update fables
-  map2(fc, fc_dist, function(fc, dist){
-    dimnames(dist) <- dimnames(fc[[distribution_var(fc)]])
-    fc[[distribution_var(fc)]] <- dist
-    point_fc <- compute_point_forecasts(dist, point_method)
-    fc[names(point_fc)] <- point_fc
-    fc
-  })
+  reconcile_fbl_list(fc, S, P, W, point_forecast = point_method)
 }
 
+#' Bottom up forecast reconciliation
+#' 
+#' \lifecycle{experimental}
+#' 
+#' Reconciles a hierarchy using the bottom up reconciliation method. The 
+#' response variable of the hierarchy must be aggregated using sums. The 
+#' forecasted time points must match for all series in the hierarchy.
+#' 
+#' @param models A column of models in a mable.
+#' 
+#' @seealso 
+#' [`reconcile()`], [`aggregate_key()`]
+#' @export
 bottom_up <- function(models){
   structure(models, class = c("lst_btmup_mdl", "lst_mdl", "list"))
 }
 
-#' @importFrom utils combn
 #' @export
 forecast.lst_btmup_mdl <- function(object, key_data, 
                                    point_forecast = list(.mean = mean), ...){
   # Keep only bottom layer
-  S <- build_smat_rows(key_data)
-  object <- object[rowSums(S) == 1]
+  agg_data <- build_key_data_smat(key_data)
+  
+  S <- matrix(0L, nrow = length(agg_data$agg), ncol = max(vec_c(!!!agg_data$agg)))
+  S[length(agg_data$agg)*(vec_c(!!!agg_data$agg)-1) + rep(seq_along(agg_data$agg), lengths(agg_data$agg))] <- 1L
+  
+  btm <- which(rowSums(S) == 1)
+  object <- object[btm]
   
   point_method <- point_forecast
   point_forecast <- list()
+  
   # Get base forecasts
-  fc <- NextMethod()
+  fc <- vector("list", nrow(S))
+  fc[btm] <- NextMethod()
+  
+  # Add dummy forecasts to unused levels
+  fc[seq_along(fc)[-btm]] <- fc[btm[1]]
+  
+  P <- matrix(0L, nrow = ncol(S), ncol = nrow(S))
+  P[(btm-1L)*nrow(P) + seq_len(nrow(P))] <- 1L
+  
+  reconcile_fbl_list(fc, S, P, W = diag(nrow(S)),
+                     point_forecast = point_method)
+}
+
+
+#' Top down forecast reconciliation
+#' 
+#' \lifecycle{experimental}
+#' 
+#' Reconciles a hierarchy using the top down reconciliation method. The 
+#' response variable of the hierarchy must be aggregated using sums. The 
+#' forecasted time points must match for all series in the hierarchy.
+#' 
+#' @param models A column of models in a mable.
+#' @param method The reconciliation method to use.
+#' 
+#' @seealso 
+#' [`reconcile()`], [`aggregate_key()`]
+#' 
+#' @export
+top_down <- function(models, method = c("forecast_proportions", "average_proportions", "proportion_averages")){
+  structure(models, class = c("lst_topdwn_mdl", "lst_mdl", "list"),
+            method = match.arg(method))
+}
+
+#' @export
+forecast.lst_topdwn_mdl <- function(object, key_data, 
+                                   point_forecast = list(.mean = mean), ...){
+  method <- object%@%"method"
+  point_method <- point_forecast
+  point_forecast <- list()
+  
+  # TODO: Add check for grouped hierarchies
+  agg_data <- build_key_data_smat(key_data)
+  S <- matrix(0L, nrow = length(agg_data$agg), ncol = max(vec_c(!!!agg_data$agg)))
+  S[length(agg_data$agg)*(vec_c(!!!agg_data$agg)-1) + rep(seq_along(agg_data$agg), lengths(agg_data$agg))] <- 1L
+  
+  # Identify top and bottom level
+  top <- which.max(rowSums(S))
+  btm <- which(rowSums(S) == 1L)
+  
+  if(method == "forecast_proportions") {
+    abort("`method = 'forecast_proportions'` is not yet supported")
+    fc <- NextMethod()
+    fc_mean <- lapply(fc, function(x) mean(x[[distribution_var(x)]]))
+  } else {
+    # Compute dis-aggregation matrix
+    history <- lapply(object, function(x) response(x)[[".response"]])
+    top_y <- history[[top]]
+    btm_y <- history[btm]
+    if (method == "average_proportions") { 
+      prop <- map_dbl(btm_y, function(y) mean(y/top_y))
+    } else if (method == "proportion_averages") {
+      prop <- map_dbl(btm_y, mean) / mean(top_y)
+    } else {
+      abort("Unkown `top_down()` reconciliation `method`.")
+    }
+    
+    # Keep only top layer
+    object <- object[top]
+    
+    # Get base forecasts
+    fc <- vector("list", nrow(S))
+    fc[top] <- NextMethod()
+    
+    # Add dummy forecasts to unused levels
+    fc[seq_along(fc)[-top]] <- fc[top]
+  }
+  
+  P <- matrix(0L, nrow = ncol(S), ncol = nrow(S))
+  P[,top] <- prop
+  
+  reconcile_fbl_list(fc, S, P, W = diag(nrow(S)),
+                     point_forecast = point_method)
+}
+
+reconcile_fbl_list <- function(fc, S, P, W, point_forecast, SP = NULL) {
   if(length(unique(map(fc, interval))) > 1){
     abort("Reconciliation of temporal hierarchies is not yet supported.")
+  }
+  if(!inherits(S, "matrix")) {
+    # Use sparse functions
+    require_package("Matrix")
+    as.matrix <- Matrix::as.matrix
+    t <- Matrix::t
+    diag <- function(x) if(is.vector(x)) Matrix::Diagonal(x = x) else Matrix::diag(x)
+    cov2cor <- Matrix::cov2cor
+  } else {
+    cov2cor <- stats::cov2cor
+  }
+  if(is.null(SP)) {
+    SP <- S%*%P
   }
   
   fc_dist <- map(fc, function(x) x[[distribution_var(x)]])
@@ -210,61 +305,29 @@ forecast.lst_btmup_mdl <- function(object, key_data,
   fc_var <- transpose_dbl(map(fc_dist, distributional::variance))
   
   # Apply to forecasts
-  fc_mean <- as.matrix(S%*%t(fc_mean))
+  fc_mean <- as.matrix(SP%*%t(fc_mean))
   fc_mean <- split(fc_mean, row(fc_mean))
   if(is_normal){
-    fc_var <- map(fc_var, function(W) diag(S%*%diag(W)%*%t(S)))
+    R1 <- cov2cor(W)
+    W_h <- map(fc_var, function(var) diag(sqrt(var))%*%R1%*%t(diag(sqrt(var))))
+    fc_var <- map(W_h, function(W) diag(SP%*%W%*%t(SP)))
     fc_dist <- map2(fc_mean, transpose_dbl(map(fc_var, sqrt)), distributional::dist_normal)
   } else {
     fc_dist <- map(fc_mean, distributional::dist_degenerate)
   }
   
   # Update fables
-  pmap(list(rep_along(fc_mean, fc[1]), fc_mean, fc_dist), function(fc, point, dist){
+  map2(fc, fc_dist, function(fc, dist){
     dimnames(dist) <- dimnames(fc[[distribution_var(fc)]])
     fc[[distribution_var(fc)]] <- dist
-    point_fc <- compute_point_forecasts(dist, point_method)
+    point_fc <- compute_point_forecasts(dist, point_forecast)
     fc[names(point_fc)] <- point_fc
     fc
   })
 }
 
-build_smat <- function(key_data){
-  row_col <- sym(colnames(key_data)[length(key_data)])
-  
-  fct <- key_data %>%
-    unnest(!!row_col) %>% 
-    dplyr::arrange(!!row_col) %>% 
-    select(!!expr(-!!row_col)) %>% 
-    dplyr::mutate_all(factor)
-  
-  lvls <- invoke(paste, fct[stats::complete.cases(fct),])
-  
-  smat <- map(fct, function(x){
-    mat <- rep(0, length(x)*length(levels(x)))
-    i <- which(!is.na(x))
-    if(length(i) == length(x) && length(levels(x)) > 1){
-      abort("Reconciliation of disjoint hierarchical structures is not yet supported.")
-    }
-    j <- as.numeric(x[i])
-    mat[i + length(x) * (j-1)] <- 1
-    mat <- matrix(mat, nrow = length(x), ncol = length(levels(x)),
-                  dimnames = list(NULL, levels(x)))
-    mat[is.na(x), ] <- 1
-    mat
-  })
-  
-  join_smat <- function(x, y){
-    smat <- map(split(x, col(x)), `*`, y)
-    smat <- map2(smat, colnames(x), function(S, cn) `colnames<-`(S, paste(cn, colnames(S))))
-    invoke(cbind, smat)
-  }
-
-  reduce(smat, join_smat)[,lvls,drop = FALSE]
-}
-
-
 build_smat_rows <- function(key_data){
+  lifecycle::deprecate_warn("0.2.1", "fabletools::build_smat_rows()", "fabletools::build_key_data_smat()")
   row_col <- sym(colnames(key_data)[length(key_data)])
   
   smat <- key_data %>%
@@ -309,4 +372,47 @@ build_smat_rows <- function(key_data){
   smat[out$.rows[[1]],] <- smat
   
   return(smat)
+}
+
+build_key_data_smat <- function(x){
+  kv <- names(x)[-ncol(x)]
+  agg_shadow <- as_tibble(map(x[kv], is_aggregated))
+  grp <- as_tibble(vctrs::vec_group_loc(agg_shadow))
+  num_agg <- rowSums(grp$key)
+  # Initialise comparison leafs with known/guaranteed leafs
+  x_leaf <- x[vec_c(!!!grp$loc[which(num_agg == min(num_agg))]),]
+  
+  # Sort by disaggregation to identify aggregated leafs in order
+  grp <- grp[order(num_agg),]
+  
+  grp$match <- lapply(unname(split(grp, seq_len(nrow(grp)))), function(level){
+    disagg_col <- which(!vec_c(!!!level$key))
+    agg_idx <- level[["loc"]][[1]]
+    pos <- vec_match(x_leaf[disagg_col], x[agg_idx, disagg_col])
+    pos <- vec_group_loc(pos)
+    pos <- pos[!is.na(pos$key),]
+    # Add non-matches as leaf nodes
+    agg_leaf <- setdiff(seq_along(agg_idx), pos$key)
+    if(!is_empty(agg_leaf)){
+      pos <- vec_rbind(
+        pos,
+        structure(list(key = agg_leaf, loc = as.list(seq_along(agg_leaf) + nrow(x_leaf))), 
+                  class = "data.frame", row.names = agg_leaf)
+      )
+      x_leaf <<- vec_rbind(
+        x_leaf, 
+        x[agg_idx[agg_leaf],]
+      )
+    }
+    pos$loc[order(pos$key)]
+  })
+  if(any(lengths(grp$loc) != lengths(grp$match))) {
+    abort("An error has occurred when constructing the summation matrix.\nPlease report this bug here: https://github.com/tidyverts/fabletools/issues")
+  }
+  idx_leaf <- vec_c(!!!x_leaf$.rows)
+  x$.rows[unlist(x$.rows)[vec_c(!!!grp$loc)]] <- vec_c(!!!grp$match)
+  return(list(agg = x$.rows, leaf = idx_leaf))
+  # out <- matrix(0L, nrow = nrow(x), ncol = length(idx_leaf))
+  # out[nrow(x)*(vec_c(!!!x$.rows)-1) + rep(seq_along(x$.rows), lengths(x$.rows))] <- 1L
+  # out
 }

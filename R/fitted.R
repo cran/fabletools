@@ -10,14 +10,12 @@
 #' @importFrom stats fitted
 #' @export
 fitted.mdl_df <- function(object, ...){
-  out <- gather(object, ".model", ".fit", !!!syms(mable_vars(object)))
-  kv <- key_vars(out)
-  out <- transmute(as_tibble(out),
-    !!!syms(kv),
-    !!sym(".model"),
-    fitted = map(!!sym(".fit"), fitted, ...)
-  )
-  unnest_tsbl(out, "fitted", parent_key = kv)
+  mbl_vars <- mable_vars(object)
+  kv <- key_vars(object)
+  object <- mutate(as_tibble(object), 
+              dplyr::across(all_of(mbl_vars), function(x) lapply(x, fitted, ...)))
+  object <- pivot_longer(object, mbl_vars, names_to = ".model", values_to = ".fitted")
+  unnest_tsbl(object, ".fitted", parent_key = c(kv, ".model"))
 }
 
 #' @rdname fitted.mdl_df
@@ -30,5 +28,7 @@ fitted.mdl_ts <- function(object, ...){
   
   nm <- if(length(fits) == 1) ".fitted" else map_chr(object$response, expr_name)
   
-  transmute(object$data, !!!set_names(fits, nm))
+  out <- object$data[index_var(object$data)]
+  out[nm] <- fits
+  out
 }

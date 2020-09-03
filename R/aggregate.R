@@ -32,21 +32,15 @@ aggregate_key <- function(.data, .spec, ...){
 aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){#, dev = FALSE){
   .spec <- enexpr(.spec)
   if(is.null(.spec)){
+    kv <- syms(key_vars(.data))
     message(
       sprintf("Key structural specification not found, defaulting to `.spec = %s`",
-              paste(key_vars(.data), collapse = "*"))
+              paste(kv, collapse = "*"))
     )
-    .spec <- parse_expr(paste(key_vars(.data), collapse = "*"))
+    .spec <- reduce(kv, call2, .fn = "*")
   }
-  
-  # Key combinations
-  tm <- stats::terms(new_formula(lhs = NULL, rhs = .spec), env = empty_env())
-  key_comb <- attr(tm, "factors")
-  key_vars <- rownames(key_comb)
-  key_comb <- map(split(key_comb, col(key_comb)), function(x) key_vars[x!=0])
-  if(attr(tm, "intercept")){
-    key_comb <- c(list(chr()), key_comb)
-  }
+
+  key_comb <- parse_agg_spec(.spec)
   
   idx <- index2_var(.data)
   intvl <- interval(.data)
@@ -91,6 +85,18 @@ aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){#, dev = FALSE){
                      interval = intvl)
 }
 
+parse_agg_spec <- function(expr){
+  # Key combinations
+  tm <- stats::terms(new_formula(lhs = NULL, rhs = expr), env = empty_env())
+  key_comb <- attr(tm, "factors")
+  key_vars <- sub("^`(.*)`$", "\\1", rownames(key_comb))
+  key_comb <- map(split(key_comb, col(key_comb)), function(x) key_vars[x!=0])
+  if(attr(tm, "intercept")){
+    key_comb <- c(list(chr()), key_comb)
+  }
+  unname(key_comb)
+}
+
 
 # #' @rdname aggregate_key
 # #' 
@@ -103,63 +109,84 @@ aggregate_key.tbl_ts <- function(.data, .spec = NULL, ...){#, dev = FALSE){
 # #' library(tsibble)
 # #' pedestrian %>% 
 # #'   aggregate_index()
-aggregate_index <- function(.data, .times, ...){
-  UseMethod("aggregate_index")
-}
+# aggregate_index <- function(.data, .times, ...){
+#   UseMethod("aggregate_index")
+# }
+# 
+# #' @export
+# aggregate_index.tbl_ts <- function(.data, .times = NULL, ...){
+#   warn("Temporal aggregation is highly experimental. The interface will be refined in the near future.")
+#   
+#   require_package("lubridate")
+#   idx <- index(.data)
+#   kv <- key_vars(.data)
+#   
+#   # Parse times as lubridate::period
+#   if(is.null(.times)){
+#     interval <- with(interval(.data), lubridate::years(year) + 
+#            lubridate::period(3*quarter + month, units = "month") + lubridate::weeks(week) +
+#            lubridate::days(day) + lubridate::hours(hour) + lubridate::minutes(minute) + 
+#            lubridate::seconds(second) + lubridate::milliseconds(millisecond) + 
+#            lubridate::microseconds(microsecond) + lubridate::nanoseconds(nanosecond))
+#     periods <- common_periods(.data)
+#     .times <- c(set_names(names(periods), names(periods)), list2(!!format(interval(.data)) := interval))
+#   }
+#   .times <- set_names(map(.times, lubridate::as.period), names(.times) %||% .times)
+#   
+#   secs <- map_dbl(.times, lubridate::period_to_seconds)
+#   .times <- .times[order(secs, decreasing = TRUE)]
+#   
+#   # Temporal aggregations
+#   .data <- as_tibble(.data)
+#   agg_dt <- vctrs::vec_rbind(
+#     !!!map(seq_along(.times), function(tm){
+#       group_data(
+#         group_by(.data,
+#                  !!!set_names(names(.times), names(.times))[seq_len(tm-1) + 1],
+#                  !!as_string(idx) := lubridate::floor_date(!!idx, .times[[tm]]),
+#                  !!!syms(kv))
+#       )
+#     })
+#   )
+#   kv <- setdiff(colnames(agg_dt), c(as_string(idx), ".rows"))
+#   agg_dt <- agg_dt[c(as_string(idx), kv, ".rows")]
+#   
+#   .data <- dplyr::new_grouped_df(.data, groups = agg_dt)
+#   
+#   # Compute aggregates and repair index attributes
+#   idx_attr <- attributes(.data[[as_string(idx)]])
+#   .data <- ungroup(summarise(.data, ...))
+#   attributes(.data[[as_string(idx)]]) <- idx_attr
+#   
+#   # Return tsibble
+#   as_tsibble(.data, key = kv, index = !!idx) %>% 
+#     mutate(!!!set_names(map(kv, function(x) expr(agg_vec(!!sym(x)))), kv))
+# }
 
+#' Create an aggregation vector
+#' 
+#' \lifecycle{maturing}
+#' 
+#' An aggregation vector extends usual vectors by adding <aggregated> values.
+#' These vectors are typically produced via the [`aggregate_key()`] function,
+#' however it can be useful to create them manually to produce more complicated
+#' hierarchies (such as unbalanced hierarchies).
+#' 
+#' @param x The vector of values.
+#' @param aggregated A logical vector to identify which values are <aggregated>.
+#' 
+#' @example 
+#' agg_vec(
+#'   x = c(NA, "A", "B"),
+#'   aggregated = c(TRUE, FALSE, FALSE)
+#' )
+#' 
 #' @export
-aggregate_index.tbl_ts <- function(.data, .times = NULL, ...){
-  warn("Temporal aggregation is highly experimental. The interface will be refined in the near future.")
-  
-  require_package("lubridate")
-  idx <- index(.data)
-  kv <- key_vars(.data)
-  
-  # Parse times as lubridate::period
-  if(is.null(.times)){
-    interval <- with(interval(.data), lubridate::years(year) + 
-           lubridate::period(3*quarter + month, units = "month") + lubridate::weeks(week) +
-           lubridate::days(day) + lubridate::hours(hour) + lubridate::minutes(minute) + 
-           lubridate::seconds(second) + lubridate::milliseconds(millisecond) + 
-           lubridate::microseconds(microsecond) + lubridate::nanoseconds(nanosecond))
-    periods <- common_periods(.data)
-    .times <- c(set_names(names(periods), names(periods)), list2(!!format(interval(.data)) := interval))
-  }
-  .times <- set_names(map(.times, lubridate::as.period), names(.times) %||% .times)
-  
-  secs <- map_dbl(.times, lubridate::period_to_seconds)
-  .times <- .times[order(secs, decreasing = TRUE)]
-  
-  # Temporal aggregations
-  .data <- as_tibble(.data)
-  agg_dt <- vctrs::vec_rbind(
-    !!!map(seq_along(.times), function(tm){
-      group_data(
-        group_by(.data,
-                 !!!set_names(names(.times), names(.times))[seq_len(tm-1) + 1],
-                 !!as_string(idx) := lubridate::floor_date(!!idx, .times[[tm]]),
-                 !!!syms(kv))
-      )
-    })
-  )
-  kv <- setdiff(colnames(agg_dt), c(as_string(idx), ".rows"))
-  agg_dt <- agg_dt[c(as_string(idx), kv, ".rows")]
-  
-  .data <- dplyr::new_grouped_df(.data, groups = agg_dt)
-  
-  # Compute aggregates and repair index attributes
-  idx_attr <- attributes(.data[[as_string(idx)]])
-  .data <- ungroup(summarise(.data, ...))
-  attributes(.data[[as_string(idx)]]) <- idx_attr
-  
-  # Return tsibble
-  as_tsibble(.data, key = kv, index = !!idx) %>% 
-    mutate(!!!set_names(map(kv, function(x) expr(agg_vec(!!sym(x)))), kv))
-}
-
 agg_vec <- function(x = character(), aggregated = logical(vec_size(x))){
+  is_agg <- is_aggregated(x)
+  x[is_agg] <- NA
   vec_assert(aggregated, ptype = logical())
-  vctrs::new_rcrd(list(x = x, agg = aggregated), class = "agg_vec")
+  vctrs::new_rcrd(list(x = x, agg = is_agg | aggregated), class = "agg_vec")
 }
 
 #' @export
@@ -235,7 +262,7 @@ vec_cast.agg_vec <- function(x, to, ...) UseMethod("vec_cast.agg_vec")
 #' @export
 vec_cast.agg_vec.agg_vec <- function(x, to, ...) {
   x <- vec_proxy(x)
-  if(all(x$agg)) x$x <- rep_len(vec_cast(NA, vec_proxy(to)$x), length(x$x))
+  if(all(x$agg)) x$x <- vec_rep(vec_cast(NA, vec_proxy(to)$x), length(x$x))
   vec_restore(x, to)
 }
 #' @rdname aggregation-vctrs
@@ -251,6 +278,34 @@ vec_cast.character.agg_vec <- function(x, to, ...) trimws(format(x))
 #' @export
 vec_proxy_compare.agg_vec <- function(x, ...) {
   vec_proxy(x)[c(2,1)]
+}
+
+#' @export
+`==.agg_vec` <- function(e1, e2){
+  e1_agg <- inherits(e1, "agg_vec")
+  e2_agg <- inherits(e2, "agg_vec")
+  
+  if(!e1_agg || !e2_agg){
+    x <- list(e1,e2)[[which(!c(e1_agg, e2_agg))]]
+    is_agg <- x == "<aggregated>"
+    if(any(is_agg)){
+      warn("<aggregated> character values have been converted to aggregated values.
+Hint: If you're trying to compare aggregated values, use `is_aggregated()`.")
+    }
+    x <- agg_vec(ifelse(is_agg, NA, x), aggregated = is_agg)
+    if(!e1_agg) e1 <- x else e2 <- x
+  }
+  
+  x <- vec_recycle_common(e1, e2)
+  e1 <- vec_proxy(x[[1]])
+  e2 <- vec_proxy(x[[2]])
+  out <- logical(vec_size(e1))
+  (e1$agg & e2$agg) | vec_equal(e1$x, e2$x, na_equal = TRUE)
+}
+
+#' @export
+is.na.agg_vec <- function(x) {
+  is.na(field(x, "x")) & !field(x, "agg")
 }
 
 #' Is the element an aggregation of smaller data
