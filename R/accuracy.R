@@ -104,10 +104,68 @@ MAAPE <- function(.resid, .actual, na.rm = TRUE, ...){
 #' @param d Should the response model include a first difference?
 #' @param D Should the response model include a seasonal difference?
 #' @param na.action Function to handle missing values.
-#' 
+#'
 #' @export
 point_accuracy_measures <- list(ME = ME, RMSE = RMSE, MAE = MAE,
-                       MPE = MPE, MAPE = MAPE, MASE = MASE, ACF1 = ACF1)
+                       MPE = MPE, MAPE = MAPE, MASE = MASE, RMSSE = RMSSE,
+                       ACF1 = ACF1)
+
+#' @rdname directional_accuracy_measures
+#' 
+#' @param reward,penalty The weights given to correct and incorrect predicted
+#'   directions.
+#' 
+#' @export
+MDA <- function(.resid, .actual, na.rm = TRUE, reward = 1, penalty = 0, ...){
+  actual_change <- diff(.actual)
+  actual_direction <- sign(actual_change)
+  predicted_change <- actual_change - .resid[-1]
+  predicted_direction <- sign(predicted_change)
+  directional_error <- actual_direction == predicted_direction
+  
+  (reward-penalty) * mean(directional_error, na.rm = na.rm) + penalty
+}
+
+#' @rdname directional_accuracy_measures
+#' @export
+MDV <- function(.resid, .actual, na.rm = TRUE, ...){
+  actual_change <- diff(.actual)
+  actual_direction <- sign(actual_change)
+  predicted_change <- actual_change - .resid[-1]
+  predicted_direction <- sign(predicted_change)
+  directional_accuracy <- ifelse(actual_direction == predicted_direction, 1, -1)
+  mean(abs(actual_change) * directional_accuracy, na.rm = na.rm)
+}
+
+#' @rdname directional_accuracy_measures
+#' @export
+MDPV <- function(.resid, .actual, na.rm = TRUE, ...){
+  actual_change <- diff(.actual)
+  actual_direction <- sign(actual_change)
+  predicted_change <- actual_change - .resid[-1]
+  predicted_direction <- sign(predicted_change)
+  directional_accuracy <- ifelse(actual_direction == predicted_direction, 1, -1)
+  
+  mean(abs(actual_change / .actual[-1]) * directional_accuracy, na.rm = na.rm) * 100
+}
+
+#' Directional accuracy measures
+#' 
+#' A collection of accuracy measures based on the accuracy of the prediction's 
+#' direction (say, increasing or decreasing).
+#' 
+#' `MDA()`: Mean Directional Accuracy
+#' `MDV()`: Mean Directional Value
+#' `MDPV()`: Mean Directional Percentage Value
+#' 
+#' @inheritParams point_accuracy_measures
+#' 
+#' @references 
+#' Blaskowitz and H. Herwartz (2011) "On economic evaluation of directional forecasts". \emph{International Journal of Forecasting},
+#' \bold{27}(4), 1058-1065.
+#' 
+#' @export
+directional_accuracy_measures <- list(MDA = MDA, MDV = MDV, MDPV = MDPV)
 
 #' @rdname interval_accuracy_measures
 #' @export
@@ -135,7 +193,7 @@ winkler_score <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
 pinball_loss <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
   q <- stats::quantile(.dist, level/100)
   loss <- ifelse(.actual>=q, level/100 * (.actual-q), (1-level/100) * (q-.actual))
-  mean(loss, na.rm = na.rm)
+  2*mean(loss, na.rm = na.rm)
 }
 
 #' @rdname interval_accuracy_measures
@@ -171,14 +229,20 @@ interval_accuracy_measures <- list(winkler = winkler_score)
 #' @rdname distribution_accuracy_measures
 #' @export
 percentile_score <- function(.dist, .actual, na.rm = TRUE, ...){
-  probs <- seq(0.01, 0.99, 0.01)
+  quantile_score(.dist, .actual, probs = seq(0.01, 0.99, 0.01), na.rm = TRUE, ...)
+}
+
+#' @rdname distribution_accuracy_measures
+#' @param probs A vector of probabilities at which the metric is evaluated.
+#' @export
+quantile_score <- function(.dist, .actual, probs = c(0.05,0.25,0.5,0.75,0.95),
+                           na.rm = TRUE, ...){
   percentiles <- map(probs, quantile, x = .dist)
-  if(!is.numeric(percentiles[[1]])) abort("Percentile scores are not supported for multivariate distributions.")
-  map2_dbl(percentiles, probs, function(percentile, prob){
+  if(!is.numeric(percentiles[[1]])) abort("Quantile scores are not supported for multivariate distributions.")
+  2*mean(map2_dbl(percentiles, probs, function(percentile, prob){
     L <- ifelse(.actual < percentile, (1-prob), prob)*abs(percentile-.actual)
     mean(L, na.rm = na.rm)
-  }) %>% 
-    mean(na.rm = na.rm)
+  }), na.rm = na.rm)
 }
 
 #' @rdname distribution_accuracy_measures
@@ -232,9 +296,12 @@ distribution_accuracy_measures <- list(percentile = percentile_score, CRPS = CRP
 #' Forecast skill score measure
 #' 
 #' This function converts other error metrics such as `MSE` into a skill score.
-#' The reference or benchmark forecasting method is the Naive method for 
+#' The reference or benchmark forecasting method is the Naive method for
 #' non-seasonal data, and the seasonal naive method for seasonal data.
-#' 
+#' When used within \code{\link{accuracy.fbl_ts}}, it is important that the data
+#' contains both the training and test data, as the training data is used to
+#' compute the benchmark forecasts.
+#'
 #' @param measure The accuracy measure to use in computing the skill score.
 #' 
 #' @examples 

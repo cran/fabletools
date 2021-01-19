@@ -173,9 +173,9 @@ parse_agg_spec <- function(expr){
 #' hierarchies (such as unbalanced hierarchies).
 #' 
 #' @param x The vector of values.
-#' @param aggregated A logical vector to identify which values are <aggregated>.
+#' @param aggregated A logical vector to identify which values are `<aggregated>`.
 #' 
-#' @example 
+#' @examples
 #' agg_vec(
 #'   x = c(NA, "A", "B"),
 #'   aggregated = c(TRUE, FALSE, FALSE)
@@ -184,6 +184,7 @@ parse_agg_spec <- function(expr){
 #' @export
 agg_vec <- function(x = character(), aggregated = logical(vec_size(x))){
   is_agg <- is_aggregated(x)
+  if (inherits(x, "agg_vec")) x <- field(x, "x")
   x[is_agg] <- NA
   vec_assert(aggregated, ptype = logical())
   vctrs::new_rcrd(list(x = x, agg = is_agg | aggregated), class = "agg_vec")
@@ -252,7 +253,7 @@ vec_ptype2.character.agg_vec <- function(x, y, ...) agg_vec()
 #' @rdname aggregation-vctrs
 #' @export
 vec_ptype_abbr.agg_vec <- function(x, ...) {
-  vctrs::vec_ptype_abbr(vec_data(x)[["x"]], ...)
+  paste0(vctrs::vec_ptype_abbr(vec_data(x)[["x"]], ...), "*")
 }
 
 #' @rdname aggregation-vctrs
@@ -304,8 +305,20 @@ Hint: If you're trying to compare aggregated values, use `is_aggregated()`.")
 }
 
 #' @export
+`!=.agg_vec` <- function(e1, e2) {
+  !(e1 == e2)
+}
+
+#' @export
 is.na.agg_vec <- function(x) {
   is.na(field(x, "x")) & !field(x, "agg")
+}
+
+#' @importFrom dplyr recode
+#' @export
+recode.agg_vec <- function(.x, ...) {
+  field(.x, "x") <- recode(field(.x, "x"), ...)
+  .x
 }
 
 #' Is the element an aggregation of smaller data

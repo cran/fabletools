@@ -24,6 +24,13 @@ forecast <- function(object, ...){
 #' @param new_data A `tsibble` containing future information used to forecast.
 #' @param h The forecast horison (can be used instead of `new_data` for regular
 #' time series with no exogenous regressors).
+#' @param simulate Should forecasts be based on simulated future paths instead
+#' of analytical results.
+#' @param bootstrap Should innovations from simulated forecasts be bootstrapped
+#' from the model's fitted residuals. This allows the forecast distribution to
+#' have a different underlying shape which could better represent the nature
+#' of your data.
+#' @param times The number of future paths for simulations if `simulate = TRUE`.
 #' @param point_forecast The point forecast measure(s) which should be returned 
 #' in the resulting fable. Specified as a named list of functions which accept
 #' a distribution and return a vector. To compute forecast medians, you can use
@@ -95,7 +102,6 @@ forecast <- function(object, ...){
 #' @export
 forecast.mdl_df <- function(object, new_data = NULL, h = NULL, 
                             point_forecast = list(.mean = mean), ...){
-  kv <- c(key_vars(object), ".model")
   mdls <- mable_vars(object)
   if(!is.null(h) && !is.null(new_data)){
     warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
@@ -104,6 +110,7 @@ forecast.mdl_df <- function(object, new_data = NULL, h = NULL,
   if(!is.null(new_data)){
     object <- bind_new_data(object, new_data)
   }
+  kv <- c(key_vars(object), ".model")
   
   # Evaluate forecasts
   object <- dplyr::mutate_at(as_tibble(object), vars(!!!mdls),
@@ -123,14 +130,18 @@ forecast.mdl_df <- function(object, new_data = NULL, h = NULL,
 
 #' @export
 forecast.lst_mdl <- function(object, new_data = NULL, key_data, ...){
-  map2(object, 
-       new_data %||% rep(list(NULL), length.out = length(object)),
-       forecast, ...)
+  mapply_maybe_parallel(
+    .f = forecast,
+    object, 
+    new_data %||% rep(list(NULL), length.out = length(object)),
+    MoreArgs = dots_list(...)
+  )
 }
 
 #' @rdname forecast
 #' @export
 forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = NULL,
+                            simulate = FALSE, bootstrap = FALSE, times = 5000,
                             point_forecast = list(.mean = mean), ...){
   if(!is.null(h) && !is.null(new_data)){
     warn("Input forecast horizon `h` will be ignored as `new_data` has been provided.")
@@ -156,25 +167,28 @@ forecast.mdl_ts <- function(object, new_data = NULL, h = NULL, bias_adjust = NUL
     fbl <- build_fable(new_data, response = resp_vars, distribution =  !!sym(dist_col))
     return(fbl)
   }
-  
-  # Compute specials with new_data
-  object$model$stage <- "forecast"
-  object$model$add_data(new_data)
-  specials <- tryCatch(parse_model_rhs(object$model),
-                       error = function(e){
-                         abort(sprintf(
-"%s
-Unable to compute required variables from provided `new_data`.
-Does your model require extra variables to produce forecasts?", e$message))
-                       }, interrupt = function(e) {
-                         stop("Terminated by user", call. = FALSE)
-                       })
-  object$model$remove_data()
-  object$model$stage <- NULL
-
   # Compute forecasts
-  fc <- forecast(object$fit, new_data, specials = specials, ...)
-  dimnames(fc) <- resp_vars
+  if(simulate || bootstrap) {
+    fc <- generate(object, new_data, bootstrap = bootstrap, times = times, ...)
+    fc <- unname(split(object$transformation[[1]](fc[[".sim"]]), fc[[index_var(fc)]]))
+    fc <- distributional::dist_sample(fc)
+  } else {
+    # Compute specials with new_data
+    object$model$stage <- "forecast"
+    object$model$add_data(new_data)
+    specials <- tryCatch(parse_model_rhs(object$model),
+                         error = function(e){
+                           abort(sprintf(
+  "%s
+  Unable to compute required variables from provided `new_data`.
+  Does your model require extra variables to produce forecasts?", e$message))
+                         }, interrupt = function(e) {
+                           stop("Terminated by user", call. = FALSE)
+                         })
+    object$model$remove_data()
+    object$model$stage <- NULL
+    fc <- forecast(object$fit, new_data, specials = specials, times = times, ...)
+  }
   
   # Back-transform forecast distributions
   bt <- map(object$transformation, function(x){
@@ -204,6 +218,8 @@ Does your model require extra variables to produce forecasts?", e$message))
     }
   }
   
+  dimnames(fc) <- resp_vars
+  
   new_data[[dist_col]] <- fc
   point_fc <- compute_point_forecasts(fc, point_forecast)
   new_data[names(point_fc)] <- point_fc
@@ -217,7 +233,7 @@ Does your model require extra variables to produce forecasts?", e$message))
     interval = interval(new_data)
   )
   
-  build_fable(fbl, response = resp_vars, distribution =  !!sym(dist_col))
+  build_fable(fbl, response = resp_vars, distribution = !!sym(dist_col))
 }
 
 #' Construct a new set of forecasts
@@ -249,4 +265,16 @@ compute_point_forecasts <- function(distribution, measures){
 #' @export
 forecast.fbl_ts <- function(object, ...){
   abort("Did you try to forecast a fable? Forecasts can only be computed from model objects (such as a mable).")
+}
+
+#' A set of future scenarios for forecasting
+#' 
+#' @param ... Input data for each scenario
+#' @param names_to The column name used to identify each scenario
+#' 
+#' @export
+scenarios <- function(..., names_to = ".scenario"){
+  structure(list2(
+    ...
+  ), names_to = names_to)
 }

@@ -59,6 +59,19 @@ make_future_data <- function(.data, h = NULL){
 }
 
 bind_new_data <- function(object, new_data){
+  # Handle multiple scenarios provided to new_data.
+  if(inherits(new_data, "list")) {
+    scenario_nm <- attr(new_data, "names_to") %||% ".scenario"
+    new_data <- vec_rbind(
+      !!!map(new_data, compose(as_tibble, bind_new_data), object = object),
+      .names_to = scenario_nm
+    )
+    return(
+      build_mable(new_data, 
+                  key = c(scenario_nm, key_vars(object)), 
+                  model = mable_vars(object))
+    )
+  }
   if(!is.data.frame(new_data)){
     abort(sprintf("`new_data` requires a data frame. Perhaps you intended to specify the forecast horizon? If so, use `h = %s`.", deparse(new_data)))
   }
@@ -163,7 +176,6 @@ unnest_tsbl <- function(.data, tsbl_col, parent_key = NULL, interval = NULL){
   
   .data <- unnest_tbl(.data, tsbl_col)
   
-  class(.data[[idx_chr]]) <- class(tsbl[[idx_chr]])
   build_tsibble(.data, key = !!key, index = !!idx,
                 index2 = !!index2(tsbl), ordered = is_ordered(tsbl),
                 interval = interval%||%interval(tsbl))
@@ -241,4 +253,63 @@ flatten_with_names <- function (x, sep = "_") {
     if(!is.null(names(x))) set_names(x, paste(nm, names(x), sep = sep)) else x
   })
   flatten(unname(map(x, flatten_with_names, sep = sep)))
+}
+
+mapply_maybe_parallel <- function (.f, ..., MoreArgs = list(), SIMPLIFY = FALSE) {
+  if(is_attached("package:future")){
+    require_package("future.apply")
+    
+    future.apply::future_mapply(
+      FUN = .f,
+      ...,
+      MoreArgs = MoreArgs,
+      SIMPLIFY = SIMPLIFY,
+      future.globals = FALSE
+    )
+  }
+  else{
+    mapply(
+      FUN = .f,
+      ...,
+      MoreArgs = MoreArgs,
+      SIMPLIFY = SIMPLIFY
+    )
+  }
+}
+
+mable_apply <- function (.data, .f, ..., names_to = ".model") {
+  mv <- mable_vars(.data)
+  kv <- key_vars(.data)
+  
+  # Compute .f for all models in mable
+  result <- lapply(
+    as_tibble(.data)[mv],
+    mapply_maybe_parallel,
+    .f = .f,
+    .data, 
+    MoreArgs = dots_list(...)
+  )
+  num_rows <- lapply(result, vapply, nrow, integer(1L))
+  # Assume same tsibble structure for all outputs
+  first_result <- result[[1]][[1]]
+  result <- vec_rbind(!!!lapply(result, function(x) vec_rbind(!!!x)))
+  
+  # Compute .model label
+  model <- rep.int(mv, vapply(num_rows, sum, integer(1L)))
+  
+  # Repeat key structure as needed
+  .data <- .data[rep.int(seq_along(num_rows[[1]]), num_rows[[1]]), kv]
+  
+  # Combine into single
+  .data <- bind_cols(.data, !!names_to := model, result)
+  
+  if (is_tsibble(first_result)) {
+    .data <- build_tsibble(
+      .data, key = c(kv, names_to, key_vars(first_result)), 
+      index = index_var(first_result), index2 = !!index2(first_result), 
+      ordered = is_ordered(first_result),
+      interval = interval(first_result))
+  }
+  
+  return(.data)
 }

@@ -1,6 +1,6 @@
 Package: fabletools
 Title: Core Tools for Packages in the 'fable' Framework
-Version: 0.2.1
+Version: 0.3.0
 Authors@R: 
     c(person(given = "Mitchell",
              family = "O'Hara-Wild",
@@ -17,6 +17,9 @@ Authors@R:
              role = "ctb"),
       person(given = "George",
              family = "Athanasopoulos",
+             role = "ctb"),
+      person(given = "David",
+             family = "Holt",
              role = "ctb"))
 Description: Provides tools, helpers and data structures for
     developing models and time series functions for 'fable' and extension
@@ -42,12 +45,13 @@ Language: en-GB
 LazyData: true
 RoxygenNote: 7.1.1
 NeedsCompilation: no
-Packaged: 2020-09-01 03:47:04 UTC; mitchell
+Packaged: 2021-01-19 05:34:50 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre],
   Rob Hyndman [aut],
   Earo Wang [aut],
   Di Cook [ctb],
-  George Athanasopoulos [ctb]
+  George Athanasopoulos [ctb],
+  David Holt [ctb]
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2020-09-03 22:42:11 UTC
+Date/Publication: 2021-01-19 07:20:05 UTC

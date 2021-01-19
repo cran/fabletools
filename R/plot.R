@@ -27,14 +27,16 @@ autoplot.tbl_ts <- function(object, .vars = NULL, ...){
   nk <- n_keys(object)
   
   if(quo_is_null(quo_vars)){
-    if(is_empty(measured_vars(object))){
-      abort("There are no variables to plot.")
+    mv <- measured_vars(object)
+    pos <- which(vapply(object[mv], is.numeric, logical(1L)))
+    if(is_empty(pos)) {
+      abort("Could not automatically identify an appropriate plot variable, please specify the variable to plot.")
     }
     inform(sprintf(
       "Plot variable not specified, automatically selected `.vars = %s`",
-      measured_vars(object)[1]
+      mv[pos[1]]
     ))
-    y <- sym(measured_vars(object)[1])
+    y <- sym(mv[pos[1]])
     .vars <- as_quosures(list(y), env = empty_env())
   }
   else if(possibly(compose(is_quosures, eval_tidy), FALSE)(.vars)){
@@ -83,14 +85,16 @@ autolayer.tbl_ts <- function(object, .vars = NULL, ...){
   nk <- n_keys(object)
   
   if(quo_is_null(quo_vars)){
-    if(is_empty(measured_vars(object))){
-      abort("There are no variables to plot.")
+    mv <- measured_vars(object)
+    pos <- which(vapply(object[mv], is.numeric, logical(1L)))
+    if(is_empty(pos)) {
+      abort("Could not automatically identify an appropriate plot variable, please specify the variable to plot.")
     }
     inform(sprintf(
       "Plot variable not specified, automatically selected `.vars = %s`",
-      measured_vars(object)[1]
+      mv[pos[1]]
     ))
-    y <- sym(measured_vars(object)[1])
+    y <- sym(mv[pos[1]])
     .vars <- as_quosures(list(y), env = empty_env())
   }
   else if(possibly(compose(is_quosures, eval_tidy), FALSE)(.vars)){
@@ -202,7 +206,11 @@ autoplot.fbl_ts <- function(object, data = NULL, level = c(80, 95), show_gap = T
     
   # Add historical data
   if(!is.null(data)){
-    p <- p + geom_line(aes(y = !!aes_y))
+    hist_aes <- aes(y = !!aes_y)
+    if(length(key_vars(data)) > 0) {
+      hist_aes[["group"]] <- expr(interaction(!!!syms(key_vars(data))))
+    }
+    p <- p + geom_line(hist_aes)
   }
   
   # Add facets
@@ -313,8 +321,8 @@ build_fbl_layer <- function(object, data = NULL, level = c(80, 95),
     interval_data <- as_tibble(hilo(object, level = level)) %>% 
       tidyr::pivot_longer(paste0(level, "%"), names_to = NULL, values_to = "hilo")
     if(length(resp_var) > 1){
-      interval_data <- interval_data %>% 
-        tidyr::unpack("hilo") %>% 
+      interval_data <- interval_data[setdiff(names(interval_data), resp_var)] %>% 
+        tidyr::unpack("hilo", names_repair = "minimal") %>% 
         tidyr::pivot_longer(names(interval_data$hilo), names_to = ".response", values_to = "hilo")
     }
     intvl_mapping <- mapping
@@ -337,7 +345,7 @@ build_fbl_layer <- function(object, data = NULL, level = c(80, 95),
   object[names(point_forecast)] <- map(point_forecast, calc, object[[dist_var]])
   object <- tidyr::pivot_longer(object[-match(dist_var, names(object))], names(point_forecast), names_to = "Point forecast", values_to = dist_var)
   if(length(resp_var) > 1){
-    object <- object %>% 
+    object <- object[setdiff(names(object), resp_var)] %>% 
       tidyr::unpack(!!dist_var) %>% 
       tidyr::pivot_longer(names(object[[dist_var]]), names_to = ".response", values_to = dist_var)
   }
@@ -370,6 +378,7 @@ build_fbl_layer <- function(object, data = NULL, level = c(80, 95),
 #' @param object A dable.
 #' @param .vars The column of the dable used to plot. By default, this will be the response variable of the decomposition.
 #' @param scale_bars If `TRUE`, each facet will include a scale bar which represents the same units across each facet.
+#' @param level If the decomposition contains distributions, which levels should be used to display intervals?
 #' @inheritParams autoplot.tbl_ts
 #' 
 #' @examples 
@@ -384,7 +393,8 @@ build_fbl_layer <- function(object, data = NULL, level = c(80, 95),
 #' 
 #' @importFrom ggplot2 ggplot geom_line geom_rect facet_grid vars ylab labs
 #' @export
-autoplot.dcmp_ts <- function(object, .vars = NULL, scale_bars = TRUE, ...){
+autoplot.dcmp_ts <- function(object, .vars = NULL, scale_bars = TRUE, 
+                             level = c(80, 95), ...){
   method <- object%@%"method"
   idx <- index(object)
   keys <- key(object)
@@ -400,16 +410,35 @@ autoplot.dcmp_ts <- function(object, .vars = NULL, scale_bars = TRUE, ...){
   }
   object <- as_tsibble(object) %>% 
     transmute(!!.vars, !!!syms(all.vars(dcmp))) %>% 
-    gather(".var", ".val", !!!syms(measured_vars(.)), factor_key = TRUE)
+    pivot_longer(measured_vars(.), values_to = ".val",
+                 names_to = ".var", names_transform = list(.var = ~ factor(., levels = unique(.))))
   
-  line_aes <- aes(x = !!idx, y = !!sym(".val"))
-  if(n_keys > 1){
-    line_aes$colour <- expr(interaction(!!!keys, sep = "/"))
+  if(has_dist <- inherits(object[[".val"]], "distribution")) { 
+    interval_data <- as_tibble(object)
+    interval_data[paste0(level, "%")] <- lapply(level, hilo, x = interval_data[[".val"]])
+    interval_data <- tidyr::pivot_longer(
+      interval_data, paste0(level, "%"), names_to = NULL, values_to = "hilo"
+    )
+    intvl_aes <- aes(x = !!idx, hilo = !!sym("hilo"))
+    line_aes <- aes(x = !!idx, y = mean(!!sym(".val")))
+    if(n_keys > 1){
+      line_aes$colour <- intvl_aes$fill <- expr(interaction(!!!keys, sep = "/"))
+    }
+    dcmp_geom <- list(
+      distributional::geom_hilo_ribbon(intvl_aes, ..., data = interval_data),
+      geom_line(line_aes, ...)
+    )
+  } else {
+    line_aes <- aes(x = !!idx, y = !!sym(".val"))
+    if(n_keys > 1){
+      line_aes$colour <- expr(interaction(!!!keys, sep = "/"))
+    }
+    dcmp_geom <- geom_line(line_aes, ...)
   }
   
   p <- object %>% 
     ggplot() + 
-    geom_line(line_aes, ...) + 
+    dcmp_geom + 
     facet_grid(vars(!!sym(".var")), scales = "free_y") + 
     ylab(NULL) + 
     labs(
@@ -425,10 +454,12 @@ autoplot.dcmp_ts <- function(object, .vars = NULL, scale_bars = TRUE, ...){
     # Avoid issues with visible bindings
     ymin <- ymax <- center <- diff <- NULL
     
-    range_data <- object %>%
-      as_tibble %>% 
+    min_fn <- if(has_dist) function(x, ...) min(quantile(x, (100-max(level))/200), ...) else min
+    max_fn <- if(has_dist) function(x, ...) max(quantile(x, (100 + max(level))/200), ...) else max
+    
+    range_data <- as_tibble(object) %>%
       group_by(!!sym(".var")) %>% 
-      summarise(ymin = min(!!sym(".val"), na.rm = TRUE), ymax = max(!!sym(".val"), na.rm = TRUE)) %>% 
+      summarise(ymin = min_fn(!!sym(".val"), na.rm = TRUE), ymax = max_fn(!!sym(".val"), na.rm = TRUE)) %>% 
       mutate(
         center = (ymin + ymax) / 2,
         diff = min(ymax - ymin),

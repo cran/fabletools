@@ -48,8 +48,11 @@ as_mable.data.frame <- function(x, key = NULL, model = NULL, ...){
 build_mable <- function (x, key = NULL, key_data = NULL, model = NULL) {
   model <- names(tidyselect::eval_select(enquo(model), data = x))
   
-  if(length(unique(map(x[model], function(mdl) mdl[[1]]$response))) > 1){
+  if(length(resp_var <- unique(map(x[model], function(mdl) response_vars(mdl[[1]])))) > 1){
     abort("A mable can only contain models with the same response variable(s).")
+  }
+  if(length(resp_var) == 0) {
+    abort("A mable must contain at least one model.")
   }
   
   if (!is_null(key_data)){
@@ -65,11 +68,11 @@ build_mable <- function (x, key = NULL, key_data = NULL, model = NULL) {
     abort("The result is not a valid mable. The key variables must uniquely identify each row.")
   }
   
-  build_mable_meta(x, key_data, model)
+  build_mable_meta(x, key_data, model, response = resp_var[[1]])
 }
 
-build_mable_meta <- function(x, key_data, model){
-  tibble::new_tibble(x, key = key_data, model = model,
+build_mable_meta <- function(x, key_data, model, response){
+  tibble::new_tibble(x, key = key_data, model = model, response = response,
                      nrow = NROW(x), class = "mdl_df", subclass = "mdl_df") 
 }
 
@@ -139,7 +142,22 @@ pivot_longer.mdl_df <- function (data, ..., names_to = "name") {
 
 #' @export
 select.mdl_df <- function (.data, ...){
-  res <- select(as_tibble(.data), ...)
+  res <- NextMethod()
+  
+  loc <- tidyselect::eval_select(expr(c(...)), .data)
+  
+  kv <- key_vars(.data)
+  rm_kv <- intersect(kv, names(.data)[-loc])
+  key_data <- vec_unique(select(key_data(.data), rm_kv))
+  
+  # Drop/keep redundant/necessary key variables
+  if(vec_size(key_data) == 1) {
+    .data%@%"key" <- key_data(.data)[c(setdiff(kv, rm_kv), ".rows")]
+  } else {
+    res <- bind_cols(.data[rm_kv], res)
+  }
+  names(.data)[loc] <- names(loc)
+  
   restore_mable(res, .data)
 }
 #' @export
@@ -164,7 +182,8 @@ transmute.mdl_df <- function (.data, ...){
   colnames(kd) <- c(value[key_pos], ".rows")
   mdl_pos <- match(mable_vars(x), nm)
   res <- NextMethod()
-  build_mable_meta(res, key_data = kd, model = value[mdl_pos])
+  build_mable_meta(res, key_data = kd, model = value[mdl_pos], 
+                   response = response_vars(x))
 }
 
 #' @export
