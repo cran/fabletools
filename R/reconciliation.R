@@ -87,7 +87,7 @@ forecast.lst_mint_mdl <- function(object, key_data,
   res <- map(object, function(x, ...) residuals(x, ...), type = "response")
   if(length(unique(map_dbl(res, nrow))) > 1){
     # Join residuals by index #199
-    res <- unname(as.matrix(reduce(res, full_join, by = "date")[,-1]))
+    res <- unname(as.matrix(reduce(res, full_join, by = index_var(res[[1]]))[,-1]))
   } else {
     res <- matrix(invoke(c, map(res, `[[`, 2)), ncol = length(object))
   }
@@ -348,7 +348,7 @@ forecast.lst_topdwn_mdl <- function(object, key_data,
 #' 
 #' @seealso 
 #' [`reconcile()`], [`aggregate_key()`]
-#' [*Forecasting: Principles and Practice* - Middle-out approach](https://otexts.com/fpp3/middle-out.html)
+#' [*Forecasting: Principles and Practice* - Middle-out approach](https://otexts.com/fpp3/single-level.html#middle-out-approach)
 #' 
 #' @export
 middle_out <- function(models, split = 1){

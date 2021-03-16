@@ -1,6 +1,6 @@
 Package: fabletools
 Title: Core Tools for Packages in the 'fable' Framework
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: 
     c(person(given = "Mitchell",
              family = "O'Hara-Wild",
@@ -45,7 +45,7 @@ Language: en-GB
 LazyData: true
 RoxygenNote: 7.1.1
 NeedsCompilation: no
-Packaged: 2021-01-19 05:34:50 UTC; mitchell
+Packaged: 2021-03-16 15:57:54 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre],
   Rob Hyndman [aut],
   Earo Wang [aut],
@@ -54,4 +54,4 @@ Author: Mitchell O'Hara-Wild [aut, cre],
   David Holt [ctb]
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2021-01-19 07:20:05 UTC
+Date/Publication: 2021-03-16 22:10:03 UTC
