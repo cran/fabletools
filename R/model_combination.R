@@ -22,8 +22,7 @@ train_combination <- function(.data, specials, ..., cmbn_fn, cmbn_args){
 #' @param cmbn_fn A function used to produce the combination.
 #' @param cmbn_args Additional arguments passed to `cmbn_fn`.
 #' 
-#' @examples 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#' @examplesIf requireNamespace("fable", quietly = TRUE)
 #' library(fable)
 #' library(tsibble)
 #' library(tsibbledata)
@@ -43,7 +42,6 @@ train_combination <- function(.data, specials, ..., cmbn_fn, cmbn_args){
 #'       cmbn_args = list(weights = "inv_var")
 #'     )
 #'   )
-#' }
 #' @export
 combination_model <- function(..., cmbn_fn = combination_ensemble,
                               cmbn_args = list()){
@@ -62,6 +60,8 @@ combination_model <- function(..., cmbn_fn = combination_ensemble,
 #' 
 #' @param ... Estimated models used in the ensemble.
 #' @param weights The method used to weight each model in the ensemble.
+#' 
+#' @seealso [`combination_weighted()`]
 #' 
 #' @export
 combination_ensemble <- function(..., weights = c("equal", "inv_var")){
@@ -97,6 +97,33 @@ combination_ensemble <- function(..., weights = c("equal", "inv_var")){
   out
 }
 
+#' Weighted combination
+#' 
+#' @param ... Estimated models used in the ensemble.
+#' @param weights The numeric weights applied to each model in `...`
+#' 
+#' @seealso [`combination_ensemble()`]
+#' 
+#' @export
+combination_weighted <- function(..., weights = NULL){
+  mdls <- dots_list(...)
+  resp_var <- mdls[[1]]$response
+  
+  if(all(map_lgl(mdls, inherits, "mdl_defn"))){
+    return(combination_model(..., cmbn_fn = combination_weighted,
+                             cmbn_args = list(weights = weights)))
+  }
+  vctrs::vec_assert(weights, numeric(), length(mdls))
+  
+  # Standardise weights to sum 1
+  weights <- weights/sum(weights)
+  
+  mdls <- map2(mdls, weights, `*`)
+  out <- reduce(mdls, `+`)
+  out$response <- resp_var
+  out
+}
+
 new_model_combination <- function(x, combination){
   mdls <- map_lgl(x, is_model)
   
@@ -104,8 +131,14 @@ new_model_combination <- function(x, combination){
   comb_response <- map(transpose(mdls_response),
                        function(x) eval(expr(substitute(!!combination, x))))
   
-  # Try to simplify the response
+  if(length(comb_response) > 1) abort("Combining multivariate models is not yet supported.")
+  
+  # Compute new response data
+  resp <- map2(x, mdls, function(x, is_mdl) if(is_mdl) response(x)[[".response"]] else x)
+  resp <- eval_tidy(combination, resp)
+  
   if(any(!mdls)){
+    # Simplify the response with a f(numeric, model)
     op <- deparse(combination[[1]])
     if(op == "*" || (op == "/" && mdls[1])){
       num <- x[[which(!mdls)]]
@@ -117,13 +150,23 @@ new_model_combination <- function(x, combination){
         }
       }
     }
+  } else {
+    # Simplify the response with f(model, model)
+    
+    # Assume both models come from the same root variable, find the data of the
+    # mable's response variable.
+    root_var <- traverse(
+      x$e1, 
+      .f = function(x, y) x[[1]][c("data", "response")],
+      .g = function(mdl) Filter(function(x) inherits(x, "mdl_ts"), mdl$fit),
+      base = function(mdl) !inherits(mdl$fit, "model_combination")
+    )
+    root_resp <- root_var[["response"]]
+    root_resp_var <- rlang::as_label(root_resp[[1]])
+    if(isTRUE(all.equal(resp, root_var$data[[root_resp_var]]))) {
+      comb_response <- root_resp
+    }
   }
-  
-  if(length(comb_response) > 1) abort("Combining multivariate models is not yet supported.")
-  
-  # Compute new response data
-  resp <- map2(x, mdls, function(x, is_mdl) if(is_mdl) response(x)[[".response"]] else x)
-  resp <- eval_tidy(combination, resp)
   
   new_model(
     structure(x, combination = combination, class = c("model_combination")),
@@ -257,7 +300,7 @@ forecast.model_combination <- function(object, new_data, specials, ...){
     fc_cov <- map_dbl(fc_sd, function(sigma) (diag(sigma)%*%fc_cov%*%t(diag(sigma)))[1,2])
   }
   
-  is_normal <- map_lgl(object[mdls], function(x) inherits(x[[1]], "dist_normal"))
+  is_normal <- map_lgl(object[mdls], function(x) all(dist_types(x) == "dist_normal"))
   if(all(is_normal)){ # Improve check to ensure all distributions are normal
     .dist <- eval_tidy(expr, object)
     # var(x) + var(y) + 2*cov(x,y)

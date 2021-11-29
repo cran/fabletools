@@ -50,8 +50,8 @@ forecast <- function(object, ...){
 #'   `point_forecast` argument.
 #' - All columns in `new_data`, excluding those whose names conflict with the
 #'   above.
-#' @examples 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#'   
+#' @examplesIf requireNamespace("fable", quietly = TRUE) && requireNamespace("tsibbledata", quietly = TRUE)
 #' library(fable)
 #' library(tsibble)
 #' library(tsibbledata)
@@ -96,7 +96,6 @@ forecast <- function(object, ...){
 #' fit %>% 
 #'   forecast(new_data = future_aus) %>% 
 #'   autoplot(aus_economy)
-#' }
 #' 
 #' @rdname forecast
 #' @export
@@ -114,7 +113,7 @@ forecast.mdl_df <- function(object, new_data = NULL, h = NULL,
   
   # Evaluate forecasts
   object <- dplyr::mutate_at(as_tibble(object), vars(!!!mdls),
-                             forecast, object[["new_data"]],
+                             forecast, new_data = object[["new_data"]],
                              h = h, point_forecast = point_forecast, ...,
                              key_data = key_data(object))
   
@@ -256,10 +255,7 @@ construct_fc <- function(point, sd, dist){
 }
 
 compute_point_forecasts <- function(distribution, measures){
-  measures <- map(measures, calc, distribution)
-  resp <- dimnames(distribution)
-  if(length(resp) > 1) measures <- map(measures, set_names, resp)
-  flatten_with_names(measures)
+  map(measures, calc, distribution)
 }
 
 #' @export

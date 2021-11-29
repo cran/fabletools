@@ -173,8 +173,8 @@ winkler_score <- function(.dist, .actual, level = 95, na.rm = TRUE, ...){
   interval <- hilo(.dist, level)
   if(!inherits(interval, "hilo")) abort("Winkler scores are not supported for multivariate distributions.")
   alpha <- 1-level/100
-  lt <- vctrs::vec_proxy(interval)$lower
-  ut <- vctrs::vec_proxy(interval)$upper
+  lt <- interval$lower
+  ut <- interval$upper
   score <- ifelse(
     .actual < lt, 
       (ut - lt) + (2/alpha)*(lt-.actual),
@@ -248,8 +248,9 @@ quantile_score <- function(.dist, .actual, probs = c(0.05,0.25,0.5,0.75,0.95),
 #' @rdname distribution_accuracy_measures
 #' @export
 CRPS <- function(.dist, .actual, n_quantiles = 1000, na.rm = TRUE, ...){
-  is_normal <- map_lgl(.dist, inherits, "dist_normal")
-  is_sample <- map_lgl(.dist, inherits, "dist_sample")
+  dist_type <- dist_types(.dist)
+  is_normal <- dist_type == "dist_normal"
+  is_sample <- dist_type == "dist_sample"
   z <- rep(NA_real_, length(.dist))
   
   if(any(is_normal)){
@@ -286,6 +287,55 @@ CRPS <- function(.dist, .actual, n_quantiles = 1000, na.rm = TRUE, ...){
 
 #' Distribution accuracy measures
 #' 
+#' These accuracy measures can be used to evaluate how accurately a forecast 
+#' distribution predicts a given actual value.
+#' 
+#' @section Quantile/percentile score (pinball loss):
+#' 
+#' A quantile (or percentile) score evaluates how accurately a set of quantiles
+#' (or percentiles) from the distribution match the given actual value. This 
+#' score uses a pinball loss function, and can be calculated via the average of
+#' the score function given below:
+#' 
+#' The score function \eqn{s_p(q_p,y)} is given by \eqn{(1-p)(q_p-y)} if 
+#' \eqn{y < q_p}, and \eqn{p(y-q_p)} if \eqn{y \ge q_p}. Where \eqn{p} is the 
+#' quantile probability, \eqn{q_p = F^{-1}(p)} is the quantile with probability 
+#' \eqn{p}, and \eqn{y} is the actual value.
+#' 
+#' The resulting accuracy measure will average this score over all predicted
+#' points at all desired quantiles (defined via the `probs` argument).
+#' 
+#' The percentile score is uses the same method with `probs` set to all 
+#' percentiles `probs = seq(0.01, 0.99, 0.01)`.
+#' 
+#' @section Continuous ranked probability score (CRPS):
+#' 
+#' The continuous ranked probability score (CRPS) is the continuous analogue of
+#' the pinball loss quantile score defined above. Its value is twice the 
+#' integral of the quantile score over all possible quantiles:
+#' 
+#' \deqn{
+#'   CRPS(F,y) = 2 \int_0^1 s_p(q_p,y) dp
+#' }{
+#'   CRPS(F,y) = 2 integral_0^1 s_p(q_p,y) dp
+#' }
+#' 
+#' It can be computed directly from the distribution via:
+#' 
+#' \deqn{
+#'   CRPS(F,y) = \int_{-\infty}^\infty (F(x) - 1{y\leq x})^2 dx
+#' }{
+#'   CRPS(F,y) = integral_{-\infty}^\infty (F(x) - 1{y\leq x})^2 dx
+#' }
+#' 
+#' For some forecast distribution \eqn{F} and actual value \eqn{y}.
+#' 
+#' Calculating the CRPS accuracy measure is computationally difficult for many
+#' distributions, however it can be computed quickly and exactly for Normal and
+#' emperical (sample) distributions. For other distributions the CRPS is 
+#' approximated using the quantile score of many quantiles (using the number of 
+#' quantiles specified in the `n_quantiles` argument).
+#' 
 #' @inheritParams interval_accuracy_measures
 #' @param n_quantiles The number of quantiles to use in approximating CRPS when an exact solution is not available.
 #' 
@@ -308,7 +358,7 @@ distribution_accuracy_measures <- list(percentile = percentile_score, CRPS = CRP
 #' 
 #' skill_score(MSE)
 #' 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#' @examplesIf requireNamespace("fable", quietly = TRUE)
 #' library(fable)
 #' library(tsibble)
 #' 
@@ -321,7 +371,6 @@ distribution_accuracy_measures <- list(percentile = percentile_score, CRPS = CRP
 #'   ) %>%
 #'   forecast(h = "1 year") %>%
 #'   accuracy(lung_deaths, measures = list(skill = skill_score(MSE)))
-#' }
 #' 
 #' @export
 skill_score <- function(measure) {
@@ -378,8 +427,7 @@ accuracy <- function(object, ...){
 #' 
 #' @param measures A list of accuracy measure functions to compute (such as [`point_accuracy_measures`], [`interval_accuracy_measures`], or [`distribution_accuracy_measures`])
 #' 
-#' @examples 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#' @examplesIf requireNamespace("fable", quietly = TRUE) && requireNamespace("tsibbledata", quietly = TRUE)
 #' library(fable)
 #' library(tsibble)
 #' library(tsibbledata)
@@ -407,7 +455,6 @@ accuracy <- function(object, ...){
 #'     aus_production,
 #'     measures = list(interval_accuracy_measures, distribution_accuracy_measures)
 #'   )
-#' }
 #' 
 #' @export
 accuracy.mdl_df <- function(object, measures = point_accuracy_measures, ...){
@@ -524,7 +571,7 @@ accuracy.fbl_ts <- function(object, data, measures = point_accuracy_measures, ..
   
   if(mv <- length(resp) > 1){
     aug <- object <- tidyr::pivot_longer(
-      transmute(object, mean(!!dist), .dist = !!dist, !!!syms(intersect(by, colnames(object)))),
+      transmute(object, as_tibble(mean(!!dist)), .dist = !!dist, !!!syms(intersect(by, colnames(object)))),
       !!resp, names_to = ".response", values_to = ".fc")
     aug_dt <- data <- tidyr::pivot_longer(
       transmute(data, !!index(data), !!!syms(resp)),

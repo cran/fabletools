@@ -6,8 +6,7 @@
 #' @param .data A mable.
 #' @param ... Reconciliation methods applied to model columns within `.data`.
 #' 
-#' @examples 
-#' if (requireNamespace("fable", quietly = TRUE)) {
+#' @examplesIf requireNamespace("fable", quietly = TRUE)
 #' library(fable)
 #' lung_deaths_agg <- as_tsibble(cbind(mdeaths, fdeaths)) %>%
 #'   aggregate_key(key, value = sum(value))
@@ -16,7 +15,6 @@
 #'   model(lm = TSLM(value ~ trend() + season())) %>%
 #'   reconcile(lm = min_trace(lm)) %>% 
 #'   forecast()
-#' }
 #' 
 #' @export
 reconcile <- function(.data, ...){
@@ -181,7 +179,8 @@ bottom_up <- function(models){
 
 #' @export
 forecast.lst_btmup_mdl <- function(object, key_data, 
-                                   point_forecast = list(.mean = mean), ...){
+                                   point_forecast = list(.mean = mean),
+                                   new_data = NULL, ...){
   # Keep only bottom layer
   agg_data <- build_key_data_smat(key_data)
   
@@ -189,17 +188,21 @@ forecast.lst_btmup_mdl <- function(object, key_data,
   S[length(agg_data$agg)*(vec_c(!!!agg_data$agg)-1) + rep(seq_along(agg_data$agg), lengths(agg_data$agg))] <- 1L
   
   btm <- agg_data$leaf
-  object <- object[btm]
+  # object <- object[btm]
+  # if(!is.null(new_data)){
+  #   new_data <- new_data[btm]
+  # }
   
   point_method <- point_forecast
   point_forecast <- list()
   
   # Get base forecasts
-  fc <- vector("list", nrow(S))
-  fc[btm] <- NextMethod()
+  # fc <- vector("list", nrow(S))
+  # fc[btm] <- NextMethod()
+  fc <- NextMethod()
   
   # Add dummy forecasts to unused levels
-  fc[seq_along(fc)[-btm]] <- fc[btm[1]]
+  # fc[seq_along(fc)[-btm]] <- fc[btm[1]]
   
   P <- matrix(0L, nrow = ncol(S), ncol = nrow(S))
   P[(btm-1L)*nrow(P) + seq_len(nrow(P))] <- 1L
@@ -281,7 +284,7 @@ forecast.lst_topdwn_mdl <- function(object, key_data,
     # Code adapted from reconcile_fbl_list to handle changing weights over horizon
     # This will need to be refactored later so that reconcile_fbl_list is broken up into more sub-problems
     # As the weight matrix is an identity, this code and computation is much simpler.
-    is_normal <- all(map_lgl(fc_dist, function(x) inherits(x[[1]], "dist_normal")))
+    is_normal <- all(map_lgl(fc_dist, function(x) all(dist_types(x) == "dist_normal")))
     # Point forecast means can be computed in one step
     fc_mean <- split(fc_mean[,top]*fc_prop,col(fc_prop))
     if(is_normal) {
@@ -358,7 +361,8 @@ middle_out <- function(models, split = 1){
 
 #' @export
 forecast.lst_midout_mdl <- function(object, key_data, 
-                                    point_forecast = list(.mean = mean), ...){
+                                    point_forecast = list(.mean = mean),
+                                    new_data = NULL, ...){
   split <- object%@%"split"
   point_method <- point_forecast
   point_forecast <- list()
@@ -384,6 +388,9 @@ forecast.lst_midout_mdl <- function(object, key_data,
   }
   nodes_above <- which(agg_shadow[[split]])
   object <- object[-nodes_above]
+  if(!is.null(new_data)){
+    new_data <- new_data[-nodes_above]
+  }
   fc <- NextMethod()
   
   fc_dist <- lapply(fc, function(x) x[[distribution_var(x)]])
@@ -422,7 +429,7 @@ forecast.lst_midout_mdl <- function(object, key_data,
   # Code adapted from reconcile_fbl_list to handle changing weights over horizon
   # This will need to be refactored later so that reconcile_fbl_list is broken up into more sub-problems
   # As the weight matrix is an identity, this code and computation is much simpler.
-  is_normal <- all(map_lgl(fc_dist, function(x) inherits(x[[1]], "dist_normal")))
+  is_normal <- all(map_lgl(fc_dist, function(x) all(dist_types(x) == "dist_normal")))
   # Point forecast means can be computed in one step
   fc_mean <- split(fc_mean,col(fc_mean))
   if(is_normal) {
@@ -474,7 +481,7 @@ reconcile_fbl_list <- function(fc, S, P, W, point_forecast, SP = NULL) {
   }
   
   fc_dist <- map(fc, function(x) x[[distribution_var(x)]])
-  is_normal <- all(map_lgl(fc_dist, function(x) inherits(x[[1]], "dist_normal")))
+  is_normal <- all(map_lgl(fc_dist, function(x) all(dist_types(x) == "dist_normal")))
   
   fc_mean <- as.matrix(invoke(cbind, map(fc_dist, mean)))
   fc_var <- transpose_dbl(map(fc_dist, distributional::variance))
