@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -87,7 +87,7 @@ fit <- tsibbledata::aus_production %>%
   model(SMEAN(Beer))
 fit
 
-## ---- echo = FALSE------------------------------------------------------------
+## ----echo = FALSE-------------------------------------------------------------
 tibble::tribble(
   ~ Method, ~ Value, ~ Description,
   "`model_sum()`", "`character(1L)`", "A short summary of the model to display in the mable",
@@ -254,7 +254,7 @@ residuals.model_smean <- function(object, ...){
 
 residuals(fit)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  #' @importFrom fabletools components
 #  #' @export
 #  components.model_smean <- function(object, ...){

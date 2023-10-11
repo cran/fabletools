@@ -242,10 +242,9 @@ forecast.lst_topdwn_mdl <- function(object, key_data,
   agg_data <- build_key_data_smat(key_data)
   S <- matrix(0L, nrow = length(agg_data$agg), ncol = max(vec_c(!!!agg_data$agg)))
   S[length(agg_data$agg)*(vec_c(!!!agg_data$agg)-1) + rep(seq_along(agg_data$agg), lengths(agg_data$agg))] <- 1L
-  
   # Identify top and bottom level
   top <- which.max(rowSums(S))
-  btm <- which(rowSums(S) == 1L)
+  btm <- agg_data$leaf
   
   kv <- names(key_data)[-ncol(key_data)]
   agg_shadow <- as_tibble(map(key_data[kv], is_aggregated))
@@ -373,14 +372,14 @@ forecast.lst_midout_mdl <- function(object, key_data,
   
   # Identify top and bottom level
   top <- which.max(rowSums(S))
-  btm <- which(rowSums(S) == 1L)
+  btm <- agg_data$leaf
   
   kv <- names(key_data)[-ncol(key_data)]
   agg_shadow <- as_tibble(map(key_data[kv], is_aggregated))
   agg_struct <- vctrs::vec_unique(agg_shadow)
   agg_depth <- nrow(agg_struct)
   if(length(kv) != (agg_depth - 1)) {
-    abort("Top down reconciliation requires strictly hierarchical structures.")
+    abort("Middle out reconciliation requires strictly hierarchical structures.")
   }
   agg_order <- kv[order(vapply(agg_struct, sum, integer(1L)))]
   if(is.character(split)) {

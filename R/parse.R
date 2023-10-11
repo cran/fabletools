@@ -131,85 +131,120 @@ parse_model_lhs <- function(model){
   
   # Traverse call removing all resp() usage
   # This is used to evaluate the response from the input data
-  response_exprs <- lapply(model_lhs, traverse,
-                           .f = function(x, y) {
-                             if(is_resp(y)) x[[1]] else call2(call_name(y), !!!x)
-                           },
-                           .g = function(x) x[-1],
-                           # .h = function(x) if(is_resp(x)) x[[length(x)]] else x,
-                           base = function(x) is_syntactic_literal(x) || is_symbol(x)
+  response_exprs <- lapply(
+    model_lhs, traverse,
+    .f = function(x, y) {
+      if(is_resp(y)) x[[1]] else call2(y[[1]], !!!x)
+    },
+    .g = function(x) x[-1],
+    # .h = function(x) if(is_resp(x)) x[[length(x)]] else x,
+    base = function(x) is_syntactic_literal(x) || is_symbol(x)
   )
   
-  # Traverse call to parse out AST for transformations
-  traversed_lhs <- lapply(model_lhs, traverse,
-     .f = function(x, y) {
-       if(any(resp_pos <- map_lgl(x, function(x) any(names(x) %in% "response")))){
-         if(sum(resp_pos) != 1) abort("The `resp()` function can only be used once per response variable. For multivariate modelling, use `vars()`.")
-         names(x)[resp_pos] <- "response"
-       }
-       `attr<-`(x, "call", y[[1]])
-     },
-     .g = function(x) x[-1],
-     .h = function(x) {
-       if(is_resp(x)){
-         if(length(x) > 2) abort("The response variable accepts only one input. For multivariate modelling, use `vars()`.")
-         list(response = x)
-       } else list(x)
-     },
-     base = function(x) is_syntactic_literal(x) || is_symbol(x) || is_resp(x)
+  has_resp <- function(x) traverse(
+    x,
+    .f = function(x,y) x[[1]]||y, .g = function(x) x[-1], .h = is_resp,
+    base = function(x) is_syntactic_literal(x) || is_symbol(x)
   )
   
-  # Reduce traversal down to the response
+  # Traverse call AST to parse out order of transformations
+  #
   # If the response is set via resp(), remove all usage of resp() from the traversal
   # If the response is not set via resp(), identify the response by the maximum length object until encountering ties
-  traversed_lhs <- lapply(traversed_lhs, traverse,
-    .f = function(x, y){
-      # Capture parent expression of base case
-      cl <- NULL
-      if(length(x) == 0){
-        # Multiple length `n` variables found and cannot disambiguate response
-        # Start with most disaggregated result of computation as response.
-        x <- if(is.null(attr(y, "call"))) list(y[[1]]) else syms(as_label(attr(y, "call")))
-      }
-      else{
-        if(is.null(attr(y, "call"))){
-          if(is_resp(x[[1]])){
-            x[[1]] <- x[[1]][[2]]
+  # 
+  # Returns a list of increasing depth of transformations
+  traversed_lhs <- lapply(model_lhs, 
+    function(x) {
+      len1vals <- list()
+      path <- traverse(
+        x,
+        .f = function(x, y) {
+          # Special handling for if the response was found by a length tie
+          if((length(x[[1]]$response == 1L) && (as_label(x[[1]]$response) == as_label(y[[1]])))) {
+            return(x[[1]])
           }
-        }
-        else{
-          # Remove resp() from call
-          cl <- attr(y,"call")
-          if(any(names(y) == "response")){
-            cl[[which(names(y) == "response")+1]] <- x[[1]][[length(x[[1]])]]
+          
+          # Rebuild the expression
+          args <- lapply(x, function(y) {
+            y[[length(y)]]
+          })
+          y <- as.call(c(y[[1]][[1]], args))
+          
+          # Search for response
+          path <- compact(lapply(x, `[[`, "response"))
+          if(length(path) > 0) return(list(response = c(path[[1]], y)))
+          
+          # Otherwise keep the path that isn't length 1
+          path <- x[[which(map_lgl(x, function(x) is.name(x[[1]]) && !(as_label(x[[1]]) %in% names(len1vals))))]]
+          c(path, y)
+        },
+        .g = function(x) {
+          # traverse only call arguments
+          args <- x[-1]
+          
+          # search for resp() to avoid unneeded evaluation
+          resp_loc <- which(map_lgl(args, has_resp))
+          if(length(resp_loc) > 1) {
+            abort("The `resp()` function can only be used once per response variable. For multivariate modelling, use `vars()`.")
           }
+          non_resp <- if(length(resp_loc) == 0) seq_along(args) else -resp_loc
+          
+          res <- map(args[non_resp], function(y) eval(y, envir = model$data, enclos = model$specials))
+          len <- map_dbl(res, length)
+          
+          if(length(unique(len[len!=1])) > 1){
+            abort(
+              sprintf(
+                "Response variable transformation has incompatible lengths, all arguments must be the length of the data %i or 1.",
+                max(len)
+              )
+            )
+          }
+          
+          # store length 1 arguments for transformation environment
+          len1check <- function(len, arg) {
+            (len == 1) && (is.name(arg) || (is.call(arg) && !(as_label(arg[[1]]) %in% "length")))
+          }
+          
+          if(any(is_singular <- map2_lgl(len, args[non_resp], len1check))) {
+            nm <- map_chr(args[non_resp][is_singular], as_label)
+            args[non_resp][is_singular] <- syms(nm)
+            len1vals[nm] <<- res[is_singular]
+          }
+          
+          # handle unspecified response with equal length args
+          if((length(resp_loc) == 0) && (sum(len == max(len)) > 1)) {
+            return(list(call("resp", x)))
+          }
+          
+          args
+        },
+        .h = function(x) {
+          if(is_resp(x)){
+            if(length(x[-1]) > 2) abort("The response variable accepts only one input. For multivariate modelling, use `vars()`.")
+            list(response = sym(as_label(x[[2]])))
+          } else list(x)
+        },
+        base = function(x) {
+          is_syntactic_literal(x) || is_symbol(x) || is_resp(x)
         }
-      }
-      c(x[[1]], cl)
-    },
-    .g = function(x){
-      if(all(names(x) != "response") && !is.null(attr(x, "call"))){
-        # parent_len <- length(eval(attr(x, "call") %||% x[[1]], envir = model$data))
-        len <- map_dbl(x, function(y) length(eval(attr(y, "call") %||% y[[1]], envir = model$data, enclos = model$specials)))
-        if(sum(len == max(len)) == 1){
-          names(x)[which.max(len)] <- "response"
-        }
-      }
-      if("response" %in% names(x)) x["response"] else list()
-    },
-    base = function(x) !is.list(x)
+      )
+      if("response" %in% names(path)) path <- path$response
+      if(!is.list(path)) path <- list(path)
+      list(path = path, len1vals = len1vals)
+    }
   )
   
   # Obtain parsed out response variable
-  responses <- map(traversed_lhs, function(x) x[[1]])
+  responses <- map(traversed_lhs, function(x) x$path[[1]])
   responses <- map_chr(responses, as_label)
   
   # Obtain transformation expression applied to response variable
-  transform_exprs <- lapply(traversed_lhs, function(x) x[[length(x)]])
+  transform_exprs <- lapply(traversed_lhs, function(x) x$path[[length(x$path)]])
   
   # Invert transformation applied to response variable
   inverse_exprs <- lapply(traversed_lhs, function(x){
-    x <- rev(x)
+    x <- rev(x$path)
     result <- x[[length(x)]]
     for (i in seq_len(length(x) - 1)){
       result <- undo_transformation(x[[i]], x[[i + 1]], result)
@@ -217,15 +252,25 @@ parse_model_lhs <- function(model){
     result
   })
   
+  # Create evaluation environment for transformation functions
+  # Includes cached values of single length arguments
+  transform_args <- lapply(traversed_lhs, `[[`, "len1vals")
+  envs <- lapply(transform_args, new_environment,  parent = model$env)
+  
   # Produce transformation class functions for bt() usage
-  make_transforms <- function(exprs, responses){
-    map2(exprs, responses, function(x, response){
-      new_function(args = set_names(list(missing_arg()), response), x, env = model$env)
-    })
+  make_transforms <- function(exprs, responses, envs){
+    .mapply(
+      function(x, response, env){
+        new_function(args = set_names(list(missing_arg()), response), x, env = env)
+      },
+      dots = list(x = exprs, response = responses, env = envs),
+      MoreArgs = list()
+    )
   }
+  
   transformations <- map2(
-    make_transforms(transform_exprs, responses),
-    make_transforms(inverse_exprs, responses),
+    make_transforms(transform_exprs, responses, envs),
+    make_transforms(inverse_exprs, responses, envs),
     new_transformation
   )
   

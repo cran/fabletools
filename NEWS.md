@@ -1,3 +1,23 @@
+# fabletools 0.3.4
+
+## New features
+
+* The formula parser now identifies and stores length 1 values in the 
+  transformation environment. This simplifies common tasks like automatic
+  box-cox parameters for each series, which can now be done with
+  `fable::ARIMA(box_cox(y, feasts::guerrero(y)))`.
+
+## Improvements
+
+* Added support for visualising different point forecasts (say means and medians)
+  when only one forecast is to be plotted for each series.
+  
+## Bug fixes
+* Resolved issue with `autoplot(<fbl_ts>)` not identifying multiple point 
+  forecasts by `linetype`.
+* Fix for indexing of bottom series in `top_down()` and `middle_out()`
+  reconciliation methods (#362, #364 @FedericoGarza)
+
 # fabletools 0.3.3
 
 ## Improvements
