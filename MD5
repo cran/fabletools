@@ -1,6 +1,6 @@
-b31c2ecadaa4761611091e2334471584 *DESCRIPTION
+3563a284c5d557d0847903d2c54979e3 *DESCRIPTION
 0210616e6f9bdb973fe4cccd6444e457 *NAMESPACE
-5a486f267f38ac8109a26a702abce399 *NEWS.md
+390b47efbad0cb19140cae7780e3e755 *NEWS.md
 6818752e746ee789976f6a5fc64f4aac *R/accessors.R
 237856f3b62750ab6177ba97171139f3 *R/accuracy.R
 37b47c2ba9cd1581c87da98367e52dd1 *R/aggregate.R
@@ -35,7 +35,7 @@ b72a03176431ac6a51801f74f11a1388 *R/model.R
 df6f7d3d9bcc6fc1a989f7d821aef85c *R/model_null.R
 e86256a517e92106a6aa58fdaa9294cc *R/outliers.R
 b8900f6ace1f6821330f9ea0d7895d96 *R/parse.R
-d53c0054e0ea4d63564e4156981e545a *R/plot.R
+6cac88a0689635fae6224044b6b100e6 *R/plot.R
 eaa9d2eb11683a1ad9302fad722d08a6 *R/reconciliation.R
 5a667e2906be16a0a5ef89e790fca772 *R/reexports.R
 6bdb5113dd636553aac1aa541cbafb7b *R/refit.R
@@ -55,12 +55,13 @@ aa8be00742b8acd10c657e42370096aa *R/vctrs-fable.R
 30c5b8e6b71fb0ca86f7d23370e24c7a *R/xregs.R
 9eed4b755fab99446a41a2bb44576600 *R/zzz.R
 2aa1613e174051158427cbdb49f32e76 *README.md
-f9c777395eae7f8fdc2f636f339403e0 *build/fabletools.pdf
-d177c79522b967ca3fa9606cbe566aed *build/vignette.rds
-184cc9e74fa8f1bd6683d0ff42ed2ded *inst/WORDLIST
+344669a507eef33f2b11b9164867d1e7 *build/fabletools.pdf
+792c51807bc9bdde289c1c464610a812 *build/stage23.rdb
+ce24bbe45ea915d3c15a59a83e20e27e *build/vignette.rds
+475730c245f016f8515e7a57609bb343 *inst/WORDLIST
 21cda36b936f1f388eda39e59d6e611a *inst/doc/extension_models.R
 5a159266a4d4a7fc70c5e5702e4ccd9c *inst/doc/extension_models.Rmd
-63b10846090db140aef02cebae2a88b9 *inst/doc/extension_models.html
+8baa70944add6171515de2310a7a819b *inst/doc/extension_models.html
 cff23ee87902f0ba1c751ada29f20fc2 *man/MAAPE.Rd
 91c4f419991ef376e144cc6bd8f0637d *man/accuracy.Rd
 d2fa9e9eb9773e7276e81d28dcdbb3e8 *man/agg_vec.Rd

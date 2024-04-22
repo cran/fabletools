@@ -49,7 +49,7 @@ overflow: visible;
 </style>
 <style type="text/css" data-origin="pandoc">
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -510,7 +510,7 @@ values, refitting, etc.).</p>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  <span class="co"># Compute the seasonal averages</span></span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>  season_id <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">%%</span> m</span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  season_y <span class="ot">&lt;-</span> <span class="fu">split</span>(y, season_id)</span>
-<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>  season_avg <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> mean, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(<span class="dv">1</span><span class="dt">L</span>), </span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>  season_avg <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> mean, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(1L), </span>
 <span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>                       <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>  </span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a>  <span class="co"># Compute fitted values and residuals</span></span>
@@ -686,7 +686,7 @@ the model</td>
 <span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>}</span>
 <span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a></span>
 <span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="fu">tidy</span>(fit)</span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt; # A tibble: 4 x 3</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt; # A tibble: 4 × 3</span></span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt;   .model      term     estimate</span></span>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;       &lt;chr&gt;       &lt;dbl&gt;</span></span>
 <span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; 1 SMEAN(Beer) season_1     417.</span></span>
@@ -702,7 +702,7 @@ the model</td>
 <span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>}</span>
 <span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a></span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="fu">glance</span>(fit)</span>
-<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; # A tibble: 1 x 2</span></span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; # A tibble: 1 × 2</span></span>
 <span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   .model      sigma2</span></span>
 <span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;        &lt;dbl&gt;</span></span>
 <span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; 1 SMEAN(Beer)  5495.</span></span></code></pre></div>
@@ -718,7 +718,7 @@ the model</td>
 <span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a>  <span class="co"># Compute forecast variance</span></span>
 <span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a>  season_id <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, n <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">%%</span> m</span>
 <span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a>  season_e <span class="ot">&lt;-</span> <span class="fu">split</span>(object<span class="sc">$</span>residuals, season_id)</span>
-<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a>  season_sd <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_e, <span class="at">FUN =</span> sd, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(<span class="dv">1</span><span class="dt">L</span>), </span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a>  season_sd <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_e, <span class="at">FUN =</span> sd, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(1L), </span>
 <span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a>                       <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a>  </span>
 <span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a>  <span class="co"># Create forecast distributions</span></span>
@@ -752,9 +752,9 @@ the model</td>
 <span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">length</span>(object<span class="sc">$</span>coef)</span>
 <span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>  season_id <span class="ot">&lt;-</span> (<span class="fu">seq</span>(<span class="dv">0</span>, <span class="fu">length</span>(y) <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">+</span> object<span class="sc">$</span>n <span class="sc">%%</span> m) <span class="sc">%%</span> m</span>
 <span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>  season_y <span class="ot">&lt;-</span> <span class="fu">split</span>(y, season_id)</span>
-<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  season_avg <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> mean, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(<span class="dv">1</span><span class="dt">L</span>), </span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  season_avg <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> mean, <span class="at">FUN.VALUE =</span> <span class="fu">numeric</span>(1L), </span>
 <span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a>                       <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>  weight_new <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> length, <span class="at">FUN.VALUE =</span> <span class="fu">integer</span>(<span class="dv">1</span><span class="dt">L</span>),</span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>  weight_new <span class="ot">&lt;-</span> <span class="fu">vapply</span>(season_y, <span class="at">FUN =</span> length, <span class="at">FUN.VALUE =</span> <span class="fu">integer</span>(1L),</span>
 <span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a>                       <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span>
 <span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>  </span>
 <span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a>  <span class="co"># Update coefficients to include new estimates</span></span>
@@ -848,7 +848,7 @@ the model</td>
 <span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a><span class="co">#&gt;  8 SMEAN(Beer) 1957 Q4    485.</span></span>
 <span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a><span class="co">#&gt;  9 SMEAN(Beer) 1958 Q1    417.</span></span>
 <span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a><span class="co">#&gt; 10 SMEAN(Beer) 1958 Q2    373.</span></span>
-<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a><span class="co">#&gt; # i 208 more rows</span></span></code></pre></div>
+<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a><span class="co">#&gt; # ℹ 208 more rows</span></span></code></pre></div>
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co">#&#39; @importFrom fabletools residuals</span></span>
 <span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co">#&#39; @export</span></span>
 <span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>residuals.model_smean <span class="ot">&lt;-</span> <span class="cf">function</span>(object, ...){</span>
@@ -870,7 +870,7 @@ the model</td>
 <span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="co">#&gt;  8 SMEAN(Beer) 1957 Q4  -165.</span></span>
 <span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="co">#&gt;  9 SMEAN(Beer) 1958 Q1  -145.</span></span>
 <span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="co">#&gt; 10 SMEAN(Beer) 1958 Q2  -140.</span></span>
-<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="co">#&gt; # i 208 more rows</span></span></code></pre></div>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="co">#&gt; # ℹ 208 more rows</span></span></code></pre></div>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co">#&#39; @importFrom fabletools components</span></span>
 <span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="co">#&#39; @export</span></span>
 <span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>components.model_smean <span class="ot">&lt;-</span> <span class="cf">function</span>(object, ...){</span>

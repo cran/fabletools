@@ -38,6 +38,7 @@ seasonalities
 superceded
 tibble
 tidyr
+tidyselect
 tidyverse
 tidyverts
 tsibble

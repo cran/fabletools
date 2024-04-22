@@ -1,3 +1,7 @@
+# fabletools 0.4.2
+
+Minor patch to build package with latest R version as requested by CRAN.
+
 # fabletools 0.4.1
 
 Minor patch for upcoming release of ggdist v3.3.1
