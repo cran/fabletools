@@ -1,6 +1,6 @@
 Package: fabletools
 Title: Core Tools for Packages in the 'fable' Framework
-Version: 0.4.2
+Version: 0.5.0
 Authors@R: 
     c(person(given = "Mitchell",
              family = "O'Hara-Wild",
@@ -39,15 +39,16 @@ Imports: tsibble (>= 0.9.0), tibble (>= 1.4.1), ggplot2 (>= 3.0.0),
         scales
 Suggests: covr, crayon, fable (>= 0.2.0), future, future.apply, knitr,
         pillar (>= 1.0.1), feasts (>= 0.1.2), rmarkdown, spelling,
-        testthat, tsibbledata (>= 0.2.0), lubridate, Matrix
+        testthat, tsibbledata (>= 0.2.0), lubridate, urca, mvtnorm,
+        Matrix
 VignetteBuilder: knitr
 RdMacros: lifecycle
 ByteCompile: true
 Encoding: UTF-8
 Language: en-GB
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
 NeedsCompilation: no
-Packaged: 2024-04-20 11:09:08 UTC; numbat
+Packaged: 2024-09-17 03:49:23 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre]
     (<https://orcid.org/0000-0001-6729-7695>),
   Rob Hyndman [aut],
@@ -57,4 +58,4 @@ Author: Mitchell O'Hara-Wild [aut, cre]
   David Holt [ctb]
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2024-04-22 11:22:41 UTC
+Date/Publication: 2024-09-17 07:30:02 UTC

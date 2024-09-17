@@ -256,11 +256,15 @@ flatten_with_names <- function (x, sep = "_") {
 }
 
 mapply_maybe_parallel <- function (.f, ..., MoreArgs = list(), SIMPLIFY = FALSE) {
+  p <- progressr::progressor(length(..1))
+  .fp <- function(...) {
+    p()
+    .f(...)
+  }
   if(is_attached("package:future")){
     require_package("future.apply")
-    
     future.apply::future_mapply(
-      FUN = .f,
+      FUN = .fp,
       ...,
       MoreArgs = MoreArgs,
       SIMPLIFY = SIMPLIFY,
@@ -270,7 +274,7 @@ mapply_maybe_parallel <- function (.f, ..., MoreArgs = list(), SIMPLIFY = FALSE)
   }
   else{
     mapply(
-      FUN = .f,
+      FUN = .fp,
       ...,
       MoreArgs = MoreArgs,
       SIMPLIFY = SIMPLIFY
@@ -317,4 +321,13 @@ mable_apply <- function (.data, .f, ..., names_to = ".model") {
 
 dist_types <- function(dist) {
   map_chr(vec_data(dist), function(x) class(x)[1])
+}
+
+mdl_df_apply <- function(x, f, ...) {
+  mbl_vars <- mable_vars(x)
+  kv <- key_vars(x)
+  x <- mutate(as_tibble(x), 
+              dplyr::across(all_of(mbl_vars), function(x) lapply(x, f, ...)))
+  x <- pivot_longer(x, all_of(mbl_vars), names_to = ".model", values_to = "__results__")
+  unnest_tsbl(x, "__results__", parent_key = c(kv, ".model"))
 }
