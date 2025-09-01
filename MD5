@@ -1,8 +1,8 @@
-2f1ab24e013c4e70ba3eafe120252eaa *DESCRIPTION
-0112cd16ca81723e9d4d98a0ce4a6caf *NAMESPACE
-420830fc0b7583faefd79efe8cbbab3a *NEWS.md
+887471dd3e4f3a38db9bad0677751474 *DESCRIPTION
+98a038ed82d62cc69182ea93bc55e7ee *NAMESPACE
+e5776b51c7038df95e36b1156db2fe16 *NEWS.md
 6818752e746ee789976f6a5fc64f4aac *R/accessors.R
-237856f3b62750ab6177ba97171139f3 *R/accuracy.R
+81acebe30c58150c63b47cad6900f816 *R/accuracy.R
 37b47c2ba9cd1581c87da98367e52dd1 *R/aggregate.R
 43196b3a91f03002efa4e99f6a94ce8c *R/box_cox.R
 c13da3097b071dfdf7af241ac0c22152 *R/broom.R
@@ -19,9 +19,9 @@ f0cfa99a08bf99c3f0b2f8b4ab386305 *R/equation.R
 b457902c3b0168f0c249e7d954d8556f *R/fabletools-package.R
 2eb93fb9d4974a49708aac7dbbbed0c0 *R/features.R
 e1034fba71ee73a44aef1b0fe6c7ae2b *R/fitted.R
-e9f490464c0bee82d143681f08450b89 *R/forecast.R
+847f2d352b99c28bb9c1eb9e28bca868 *R/forecast.R
 45e19ce8bfce438dd436fa5aaf72acbb *R/frequency.R
-b2d60ffb11616d476c9f1a50eb716897 *R/generate.R
+f5314da89fe2e069b2135471d48b3c7a *R/generate.R
 6dbd4202a2f0de2202fc735856214508 *R/guess.R
 cb5649d99138fb397b05804ce3ad1b2e *R/hilo.R
 808cac3af24c00c94c6c8f43293a51a4 *R/hypothesise.R
@@ -36,7 +36,7 @@ b72a03176431ac6a51801f74f11a1388 *R/model.R
 df6f7d3d9bcc6fc1a989f7d821aef85c *R/model_null.R
 e86256a517e92106a6aa58fdaa9294cc *R/outliers.R
 b8900f6ace1f6821330f9ea0d7895d96 *R/parse.R
-de14858ae29bda38531f749a86aaa206 *R/plot.R
+d8f72b9cc3579f448a0cfbece66da3c4 *R/plot.R
 eaa9d2eb11683a1ad9302fad722d08a6 *R/reconciliation.R
 5a667e2906be16a0a5ef89e790fca772 *R/reexports.R
 6bdb5113dd636553aac1aa541cbafb7b *R/refit.R
@@ -55,13 +55,12 @@ aa8be00742b8acd10c657e42370096aa *R/vctrs-fable.R
 87a711754b6c2b2ae0b0b0569fe15e8f *R/vctrs-mable.R
 30c5b8e6b71fb0ca86f7d23370e24c7a *R/xregs.R
 9eed4b755fab99446a41a2bb44576600 *R/zzz.R
-2aa1613e174051158427cbdb49f32e76 *README.md
-b0fcd83081e64b3ce6e57c327984e497 *build/stage23.rdb
-f44c87dfd0c4481f7fdfdf9ed21bc9b3 *build/vignette.rds
-58092d27156a84131683a17c14447365 *inst/WORDLIST
-21cda36b936f1f388eda39e59d6e611a *inst/doc/extension_models.R
+3a253807b379185338d0e7de7acf3aec *README.md
+b1a66c228aba1e048c1a641cabed6dd7 *build/stage23.rdb
+8b0c6299e1985a7d51f0cc210cc078dc *build/vignette.rds
+459f09f92870166b31da66044b222b25 *inst/doc/extension_models.R
 5a159266a4d4a7fc70c5e5702e4ccd9c *inst/doc/extension_models.Rmd
-c4ef15dd06030e9bda1ddefed90fdc2f *inst/doc/extension_models.html
+ab69b1a2305122b57a33f202055b5f6e *inst/doc/extension_models.html
 73c655e41ed693cd0ff530e40c5b10f5 *man/IRF.Rd
 cff23ee87902f0ba1c751ada29f20fc2 *man/MAAPE.Rd
 91c4f419991ef376e144cc6bd8f0637d *man/accuracy.Rd
@@ -112,7 +111,7 @@ c3978703d8f40f2679795335715e98f4 *man/figures/lifecycle-experimental.svg
 53b3f893324260b737b3c46ed2a0e643 *man/figures/lifecycle-stable.svg
 1c1fe7a759b86dc6dbcbe7797ab8246c *man/figures/lifecycle-superseded.svg
 a02805f10249e06ffd570832856db160 *man/fitted.mdl_df.Rd
-700c2451db953723da1019dfeeae6320 *man/forecast.Rd
+025aa0a96a77088d79d51e5444d9bf33 *man/forecast.Rd
 676fd82e0d71779c4d0a82460c183616 *man/freq_tools.Rd
 84d1dad47dc2e3b2cdcf54f75b1a1858 *man/generate.mdl_df.Rd
 3c866d37bd834c880c4d0acdb467c242 *man/glance.Rd
@@ -160,7 +159,6 @@ a51f43537bddd5e20fc9206074bf59e0 *man/scenarios.Rd
 7b39011fba1ee026be22079891a239c6 *man/unpack_hilo.Rd
 bd30a92d003b45262251d14c254332a4 *man/validate_formula.Rd
 8176e3fbb47046d5f7220e147a102483 *tests/testthat.R
-3c1b37b512c824ff296db957bda0cb51 *tests/testthat/Rplots.pdf
 d086dba90b013cec5dda344fb7938612 *tests/testthat/setup-data.R
 b93b054b076aba90b60d8f5a0fd9198d *tests/testthat/setup-models.R
 78be627b30c035011df6310957ebaddf *tests/testthat/test-accuracy.R
@@ -177,7 +175,6 @@ fd9b275e3c1e18a91a0a614df7e8c3a8 *tests/testthat/test-graphics.R
 eb0999ceaf3888b6daf5f23699cb2c0c *tests/testthat/test-multivariate.R
 82d49e0a29f0f0ad028fa158654a8e2c *tests/testthat/test-parser.R
 8547dc560b56cbf6e8a91a0a5c18bf41 *tests/testthat/test-reconciliation.R
-9a5176496e53324c9cfb5bed43de4eb4 *tests/testthat/test-spelling.R
 5349d2d78b347edd154ef4669b129f95 *tests/testthat/test-transformations.R
 880d0607b40a40f313f0ffa9df705b16 *tests/testthat/test-validate_model.R
 5a159266a4d4a7fc70c5e5702e4ccd9c *vignettes/extension_models.Rmd

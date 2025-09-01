@@ -255,31 +255,31 @@ residuals.model_smean <- function(object, ...){
 residuals(fit)
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  #' @importFrom fabletools components
-#  #' @export
-#  components.model_smean <- function(object, ...){
-#    # Create a tsibble of the components
-#    dcmp <- tibble::tibble(
-#      !!object$y_name := fitted(object) + residuals(object),
-#      season = fitted(object),
-#      remainder = residuals(object)
-#    )
-#  
-#    # Describe how the components combine into other columns
-#    aliases <- tibble::lst(!!object$y_name := quote(season + remainder))
-#  
-#    # Define the behaviour of seasonal components
-#    # This is used for automatic modelling of seasonal components in `decomposition_model()`
-#    # It may also be used for plotting in the future.
-#    seasonalities <- list(season = list(period = length(object$coef)))
-#  
-#    # Return a dable
-#    as_dable(
-#      dcmp,
-#      resp = !!sym(object$y_name), method = model_sum(object),
-#      seasons = seasonalities, aliases = aliases
-#    )
-#  }
-#  
-#  components(fit) # Need to store index somewhere. This workflow should improve.
+# #' @importFrom fabletools components
+# #' @export
+# components.model_smean <- function(object, ...){
+#   # Create a tsibble of the components
+#   dcmp <- tibble::tibble(
+#     !!object$y_name := fitted(object) + residuals(object),
+#     season = fitted(object),
+#     remainder = residuals(object)
+#   )
+# 
+#   # Describe how the components combine into other columns
+#   aliases <- tibble::lst(!!object$y_name := quote(season + remainder))
+# 
+#   # Define the behaviour of seasonal components
+#   # This is used for automatic modelling of seasonal components in `decomposition_model()`
+#   # It may also be used for plotting in the future.
+#   seasonalities <- list(season = list(period = length(object$coef)))
+# 
+#   # Return a dable
+#   as_dable(
+#     dcmp,
+#     resp = !!sym(object$y_name), method = model_sum(object),
+#     seasons = seasonalities, aliases = aliases
+#   )
+# }
+# 
+# components(fit) # Need to store index somewhere. This workflow should improve.
 
