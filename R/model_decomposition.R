@@ -51,7 +51,7 @@ Please specify an appropriate model for these components",
   }
   
   mdls_default <- if(!is_empty(miss_vars)){
-    require_package("fable")
+    check_installed("fable")
     lag <- NULL
     
     structure[miss_vars] %>% 
@@ -101,6 +101,7 @@ Please check that you have specified the decomposition models appropriately.")
 #' library(feasts)
 #' library(tsibble)
 #' library(dplyr)
+#' library(ggtime)
 #' 
 #' vic_food <- tsibbledata::aus_retail %>% 
 #'   filter(State == "Victoria", Industry == "Food retailing")
