@@ -1,6 +1,6 @@
-a3b2e2bccec2f50e2fa6b299e7968ad0 *DESCRIPTION
+438bc853b5f050d500e7771c89b4a206 *DESCRIPTION
 48a6f536bf73c4114cbd0c42e563ad68 *NAMESPACE
-254ea261548aa42c400d94123a791d9e *NEWS.md
+ddeadee433705843728eaf9ed752c64c *NEWS.md
 6818752e746ee789976f6a5fc64f4aac *R/accessors.R
 f75d6c7dc929a6e0f39a9015a593af20 *R/accuracy.R
 37b47c2ba9cd1581c87da98367e52dd1 *R/aggregate.R
@@ -54,9 +54,9 @@ e2a2b159fffa13e1c040284c0095c02e *R/utils.R
 aa8be00742b8acd10c657e42370096aa *R/vctrs-fable.R
 87a711754b6c2b2ae0b0b0569fe15e8f *R/vctrs-mable.R
 2607eb498cabf5a7d5f8babdd8e2e1a5 *R/xregs.R
-475ee7eb8b6abfaf022995dfd8f1d560 *R/zzz.R
+2cf9909ab6fca0c575971a538e091a6f *R/zzz.R
 1323b14614b50e3b4dbe59c951232c53 *README.md
-b959deb8317d08aca166a8b3fe3c9a86 *build/stage23.rdb
+840ae85dc1525c7e50f4cc2f3fd35a3a *build/stage23.rdb
 bbae0b8923ee306c6ee606876f501257 *build/vignette.rds
 459f09f92870166b31da66044b222b25 *inst/doc/extension_models.R
 5a159266a4d4a7fc70c5e5702e4ccd9c *inst/doc/extension_models.Rmd
