@@ -52,7 +52,7 @@ min_trace <- function(models, method = c("wls_var", "ols", "wls_struct", "mint_c
   if(is.null(sparse)){
     sparse <- requireNamespace("Matrix", quietly = TRUE)
   }
-  structure(models, class = c("lst_mint_mdl", "lst_mdl", "list"),
+  structure(models, class = c("lst_mint_mdl", "mdl_lst", "list"),
             method = match.arg(method), sparse = sparse)
 }
 
@@ -140,15 +140,20 @@ forecast.lst_mint_mdl <- function(object, key_data,
       x = rep(1, sum(lengths(agg_data$agg))))
     J <- Matrix::sparseMatrix(i = S[row_btm,,drop = FALSE]@i+1, j = row_btm, x = 1L, 
                               dims = rev(dim(S)))
-    U <- cbind(
-      Matrix::Diagonal(diff(dim(J))),
-      -S[row_agg,,drop = FALSE]
-    )
-    U <- U[, order(c(row_agg, row_btm)), drop = FALSE]
-    Ut <- t(U)
-    WUt <- W %*% Ut
-    P <- J - J %*% WUt %*% solve(U %*% WUt, U)
-    # P <- J - J%*%W%*%t(U)%*%solve(U%*%W%*%t(U))%*%U
+    if (length(row_agg) == 0) {
+      # Simple case of no constraints, to avoid unnecessary matrix algebra
+      P <- J
+    } else {
+      U <- cbind(
+        Matrix::Diagonal(diff(dim(J))),
+        -S[row_agg,,drop = FALSE]
+      )
+      U <- U[, order(c(row_agg, row_btm)), drop = FALSE]
+      Ut <- t(U)
+      WUt <- W %*% Ut
+      P <- J - J %*% WUt %*% solve(U %*% WUt, U)
+      # P <- J - J%*%W%*%t(U)%*%solve(U%*%W%*%t(U))%*%U
+    }
   }
   else {
     S <- matrix(0L, nrow = length(agg_data$agg), ncol = max(vec_c(!!!agg_data$agg)))
@@ -174,7 +179,7 @@ forecast.lst_mint_mdl <- function(object, key_data,
 #' [`reconcile()`], [`aggregate_key()`]
 #' @export
 bottom_up <- function(models){
-  structure(models, class = c("lst_btmup_mdl", "lst_mdl", "list"))
+  structure(models, class = c("lst_btmup_mdl", "mdl_lst", "list"))
 }
 
 #' @export
@@ -228,7 +233,7 @@ forecast.lst_btmup_mdl <- function(object, key_data,
 #' 
 #' @export
 top_down <- function(models, method = c("forecast_proportions", "average_proportions", "proportion_averages")){
-  structure(models, class = c("lst_topdwn_mdl", "lst_mdl", "list"),
+  structure(models, class = c("lst_topdwn_mdl", "mdl_lst", "list"),
             method = match.arg(method))
 }
 
@@ -354,7 +359,7 @@ forecast.lst_topdwn_mdl <- function(object, key_data,
 #' 
 #' @export
 middle_out <- function(models, split = 1){
-  structure(models, class = c("lst_midout_mdl", "lst_mdl", "list"),
+  structure(models, class = c("lst_midout_mdl", "mdl_lst", "list"),
             split = split)
 }
 
@@ -576,12 +581,17 @@ build_smat_rows <- function(key_data){
 }
 
 build_key_data_smat <- function(x){
+  if (any(lengths(x[[ncol(x)]]) > 1L)) {
+    # Find the order based on the first entry position of each key
+    x[[ncol(x)]] <- as.list(rank(vapply(x[[ncol(x)]], min, integer(1L))))
+  }
+
   kv <- names(x)[-ncol(x)]
   agg_shadow <- as_tibble(map(x[kv], is_aggregated))
   grp <- as_tibble(vctrs::vec_group_loc(agg_shadow))
   num_agg <- rowSums(grp$key)
   # Initialise comparison leafs with known/guaranteed leafs
-  x_leaf <- x[vec_c(!!!grp$loc[which(num_agg == min(num_agg))]),]
+  x_leaf <- x[unlist(grp$loc[which(num_agg == min(num_agg))]),]
   
   # Sort by disaggregation to identify aggregated leafs in order
   grp <- grp[order(num_agg),]
@@ -610,10 +620,7 @@ build_key_data_smat <- function(x){
   if(any(lengths(grp$loc) != lengths(grp$match))) {
     abort("An error has occurred when constructing the summation matrix.\nPlease report this bug here: https://github.com/tidyverts/fabletools/issues")
   }
-  idx_leaf <- vec_c(!!!x_leaf$.rows)
-  x$.rows[unlist(x$.rows)[vec_c(!!!grp$loc)]] <- vec_c(!!!grp$match)
+  idx_leaf <- unlist(x_leaf$.rows)
+  x$.rows[unlist(x$.rows)[unlist(grp$loc)]] <- unlist(grp$match, recursive = FALSE)
   return(list(agg = x$.rows, leaf = idx_leaf))
-  # out <- matrix(0L, nrow = nrow(x), ncol = length(idx_leaf))
-  # out[nrow(x)*(vec_c(!!!x$.rows)-1) + rep(seq_along(x$.rows), lengths(x$.rows))] <- 1L
-  # out
 }

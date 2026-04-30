@@ -29,12 +29,14 @@ refit.mdl_df <- function(object, new_data, ...){
 }
 
 #' @export
-refit.lst_mdl <- function(object, new_data, ...){
+refit.mdl_lst <- function(object, new_data, ...){
   attrb <- attributes(object)
   object <- map2(object, new_data, refit, ...)
   attributes(object) <- attrb
   object
 }
+#' @export
+refit.lst_mdl <- deprecate_lst_mdl(refit.mdl_lst)
 
 #' @rdname refit
 #' @export

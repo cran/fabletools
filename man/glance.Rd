@@ -2,10 +2,13 @@
 % Please edit documentation in R/broom.R
 \name{glance.mdl_df}
 \alias{glance.mdl_df}
+\alias{glance.mdl_lst}
 \alias{glance.mdl_ts}
 \title{Glance a mable}
 \usage{
 \method{glance}{mdl_df}(x, ...)
+
+\method{glance}{mdl_lst}(x, ...)
 
 \method{glance}{mdl_ts}(x, ...)
 }

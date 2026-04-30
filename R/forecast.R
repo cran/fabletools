@@ -121,7 +121,7 @@ forecast.mdl_df <- function(object, new_data = NULL, h = NULL,
 }
 
 #' @export
-forecast.lst_mdl <- function(object, new_data = NULL, key_data, ...){
+forecast.mdl_lst <- function(object, new_data = NULL, key_data, ...){
   mapply_maybe_parallel(
     .f = forecast,
     object, 
@@ -129,6 +129,9 @@ forecast.lst_mdl <- function(object, new_data = NULL, key_data, ...){
     MoreArgs = dots_list(...)
   )
 }
+
+#' @export
+forecast.lst_mdl <- deprecate_lst_mdl(forecast.mdl_lst)
 
 #' @rdname forecast
 #' @export

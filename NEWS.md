@@ -1,3 +1,19 @@
+# fabletools 0.7.0
+
+## New features
+
+* Added `coherent_smat()` and `coherent_cmat()` for obtaining the structural and
+  zero-constraint matrices that encode the coherency structure of related time
+  series (#429).
+
+## Improvements
+
+* Added the preferred `mdl_lst` class to the previously named `lst_mdl` class 
+  for consistency with other model list classes `mdl_df` and `mdl_ts` (#433).
+* Added `mdl_lst` methods for `augment()`, `glance()`, and `tidy()` to enable global models (including reconciliation models) to
+  provide statistics for these methods (#424).
+* Added warning for `hfitted()` used on models without `refit()` method (#432).
+
 # fabletools 0.6.1
 
 Small patch to progress deprecation of graphics functionality that required updating reverse dependencies to require fabletools >=0.6.0.

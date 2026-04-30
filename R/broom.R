@@ -22,11 +22,18 @@
 augment.mdl_df <- function(x, ...){
   mbl_vars <- mable_vars(x)
   kv <- key_vars(x)
-  x <- mutate(as_tibble(x), 
-              dplyr::across(all_of(mbl_vars), function(x) lapply(x, augment, ...)))
+  x <- mutate(as_tibble(x), dplyr::across(all_of(mbl_vars), augment))
   x <- pivot_longer(x, all_of(mbl_vars), names_to = ".model", values_to = ".aug")
   unnest_tsbl(x, ".aug", parent_key = c(kv, ".model"))
 }
+
+#' @rdname augment
+#' @export
+augment.mdl_lst <- function(x, ...){
+  lapply(x, augment, ...)
+}
+#' @export
+augment.lst_mdl <- deprecate_lst_mdl(augment.mdl_lst)
 
 #' @rdname augment
 #' @param type Deprecated.
@@ -92,11 +99,18 @@ Response residuals are now always found in `.resid` and innovation residuals are
 #' @export
 glance.mdl_df <- function(x, ...){
   mbl_vars <- mable_vars(x)
-  x <- mutate(as_tibble(x), 
-              dplyr::across(all_of(mbl_vars), function(x) lapply(x, glance, ...)))
+  x <- mutate(as_tibble(x), dplyr::across(all_of(mbl_vars), glance))
   x <- pivot_longer(x, all_of(mbl_vars), names_to = ".model", values_to = ".glanced")
   unnest(x, ".glanced")
 }
+
+#' @rdname glance
+#' @export
+glance.mdl_lst <- function(x, ...){
+  lapply(x, glance, ...)
+}
+#' @export
+glance.lst_mdl <- deprecate_lst_mdl(glance.mdl_lst)
 
 #' @rdname glance
 #' @export
@@ -124,8 +138,7 @@ glance.mdl_ts <- function(x, ...){
 #' @export
 tidy.mdl_df <- function(x, ...){
   mbl_vars <- mable_vars(x)
-  x <- mutate(as_tibble(x), 
-         dplyr::across(all_of(mbl_vars), function(x) lapply(x, tidy, ...)))
+  x <- mutate(as_tibble(x), dplyr::across(all_of(mbl_vars), tidy))
   x <- pivot_longer(x, all_of(mbl_vars), names_to = ".model", values_to = ".tidied")
   unnest(x, ".tidied")
 }
@@ -135,15 +148,30 @@ tidy.mdl_df <- function(x, ...){
 coef.mdl_df <- function(object, ...){
   tidy(object, ...)
 }
+#' @rdname tidy
+#' @export
+coef.mdl_lst <- function(object, ...){
+  lapply(object, tidy, ...)
+}
+#' @export
+coef.lst_mdl <- deprecate_lst_mdl(coef.mdl_lst)
+#' @rdname tidy
+#' @export
+coef.mdl_ts <- function(object, ...){
+  tidy(object, ...)
+}
 
+#' @rdname tidy
+#' @export
+tidy.mdl_lst <- function(x, ...){
+  lapply(x, tidy, ...)
+}
+#' @export
+tidy.lst_mdl <- deprecate_lst_mdl(tidy.mdl_lst)
 #' @rdname tidy
 #' @export
 tidy.mdl_ts <- function(x, ...){
   tidy(x$fit, ...)
 }
 
-#' @rdname tidy
-#' @export
-coef.mdl_ts <- function(object, ...){
-  tidy(object, ...)
-}
+
