@@ -1,6 +1,6 @@
 #' Create a new mable
 #' 
-#' A mable (model table) data class (`mdl_df`) is a tibble-like data structure 
+#' A mable (model table) data class (`mbl_df`) is a tibble-like data structure 
 #' for applying multiple models to a dataset. Each row of the mable refers to a
 #' different time series from the data (identified by the key columns). A mable
 #' must contain at least one column of time series models (`mdl_ts`), where the
@@ -77,7 +77,7 @@ build_mable <- function (x, key = NULL, key_data = NULL, model = NULL) {
 
 build_mable_meta <- function(x, key_data, model, response){
   tibble::new_tibble(x, key = key_data, model = model, response = response,
-                     nrow = NROW(x), class = "mdl_df", subclass = "mdl_df") 
+                     nrow = NROW(x), class = c("mdl_df", "mbl_df"), subclass = "mdl_df") 
 }
 
 #' @export

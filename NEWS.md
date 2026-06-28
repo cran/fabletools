@@ -1,3 +1,46 @@
+# fabletools 0.8.0
+
+## New features
+
+* Model combination now uses a joint N-way convolution that correctly accounts
+  for the full residual covariance structure across all component models.
+* Added `sum()`, `mean()`, and `weighted.mean()` S3 methods for `mdl_ts` and
+  `mdl_lst` objects, providing explicit N-way model combination with equal,
+  uniform, or custom weights respectively.
+* All model arithmetic operators (`+`, `-`, `*`, `/`) now produce a single
+  `model_combination` object with correctly implied weights. Arbitrary nested
+  expressions such as `((m1 + m2)/2 + m3)/2` automatically flatten into a
+  single joint combination.
+
+## Bug fixes
+
+* `combination_ensemble()` now computes inverse-variance weights using
+  response residuals (`type = "response"`) rather than innovation residuals.
+  This is particularly important for models where the innovation residual 
+  variance is not comparable to the variance on the response scale, e.g. for
+  multiplicative ETS models (#320).
+* Replaced unintuitive behaviour of previous pairwise iterative approach for 
+  model combination (e.g. `(A + B + C)/3` as `((A + B) + C)/3`) which used 
+  pairwise covariances that yield different results for different orders of
+  models (#321).
+* Fixed computing training `accuracy()` with global models.
+
+## Improvements
+
+* Added `with_bottom` argument to `coherent_smat()` for inclusion of identity
+  matrix entries for bottom level time series. Setting this to FALSE produces
+  the A matrix (aggregated series only).
+* Added `"bottom"` attribute for `coherent_smat()` for safely identifying the
+  index positions of bottom level series via graph coherency structures.
+
+## Breaking changes
+
+* The `mdl_df` class for mable data frames will be renamed to `mbl_df` (a 
+  mable data frame). This is to avoid a naming inconsistency with the `mdl_ts`
+  and `mdl_lst` (for local and global models respectively), and free the class 
+  name for an eventual `mdl_df` multi-model class. The `mbl_df` class has been
+  added, and `mdl_df` will be removed in the next minor release (v0.9.0).
+
 # fabletools 0.7.0
 
 ## New features
